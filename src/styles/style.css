@@ -1,0 +1,117 @@
+/* Estilo general */
+body {
+  background: #0f0f1a;
+  color: white;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  margin: 0;
+}
+
+.title {
+  font-size: 2rem;
+  font-weight: bold;
+  margin-bottom: 2rem;
+  animation: pulse 2s infinite;
+}
+
+/* Contenedor grid */
+.container {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+}
+
+.card {
+  background: #1c1c2e;
+  padding: 1.5rem;
+  border-radius: 1rem;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+  transition: all 0.3s ease;
+}
+
+.card:hover {
+  transform: scale(1.05);
+}
+
+.wallet:hover {
+  box-shadow: 0 0 15px #a855f7;
+}
+
+.send:hover {
+  box-shadow: 0 0 15px #3b82f6;
+}
+
+/* Inputs */
+input {
+  width: 100%;
+  padding: 0.6rem;
+  margin-bottom: 1rem;
+  border: none;
+  border-radius: 0.5rem;
+  background: #2a2a40;
+  color: white;
+  outline: none;
+}
+
+.input-group {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.input-group input {
+  flex: 1;
+}
+
+.input-group button {
+  background: #2a2a40;
+  border: none;
+  padding: 0.5rem 0.8rem;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  color: white;
+  transition: 0.3s;
+}
+
+.input-group button:hover {
+  background: #a855f7;
+}
+
+/* Botones */
+.btn {
+  width: 100%;
+  padding: 0.8rem;
+  border: none;
+  border-radius: 0.7rem;
+  background: linear-gradient(to right, #8b5cf6, #3b82f6);
+  color: white;
+  font-weight: bold;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.btn:hover {
+  transform: scale(1.05);
+}
+
+/* Etiquetas */
+.label {
+  font-size: 0.9rem;
+  color: #aaa;
+  margin-bottom: 0.3rem;
+}
+
+.balance {
+  color: #22c55e;
+  font-weight: bold;
+  margin-bottom: 1rem;
+}
+
+/* Animaciones */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}

@@ -1,0 +1,15 @@
+{
+  "name": "html-css-project",
+  "version": "1.0.0",
+  "description": "Demo práctica con Metamask, HTML y CSS",
+  "main": "src/index.html",
+  "scripts": {
+    "start": "npx serve src",
+    "dev": "npx live-server src"
+  },
+  "dependencies": {
+    "ethers": "^6.8.1"
+  },
+  "author": "",
+  "license": "MIT"
+}
