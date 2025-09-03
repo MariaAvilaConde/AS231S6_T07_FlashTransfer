@@ -1,15 +1,17 @@
 {
-  "name": "html-css-project",
+  "name": "metamask-demo",
   "version": "1.0.0",
-  "description": "Demo práctica con Metamask, HTML y CSS",
+  "description": "Demo práctica con MetaMask, HTML y CSS",
   "main": "src/index.html",
   "scripts": {
-    "start": "npx serve src",
-    "dev": "npx live-server src"
+    "start": "node server.js",
+    "dev": "node server.js",
+    "install-deps": "npm install"
   },
   "dependencies": {
     "ethers": "^6.8.1"
   },
+  "keywords": ["metamask", "ethereum", "web3", "demo"],
   "author": "",
   "license": "MIT"
 }

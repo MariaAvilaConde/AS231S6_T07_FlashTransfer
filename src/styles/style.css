@@ -23,6 +23,21 @@ body {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 2rem;
+  max-width: 800px;
+  width: 100%;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .container {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+    padding: 0 1rem;
+  }
+  
+  .title {
+    font-size: 1.5rem;
+  }
 }
 
 .card {
@@ -55,6 +70,17 @@ input {
   background: #2a2a40;
   color: white;
   outline: none;
+  box-sizing: border-box;
+}
+
+input:focus {
+  background: #3a3a50;
+  box-shadow: 0 0 5px rgba(139, 92, 246, 0.5);
+}
+
+input[readonly] {
+  background: #1a1a2e;
+  cursor: default;
 }
 
 .input-group {
