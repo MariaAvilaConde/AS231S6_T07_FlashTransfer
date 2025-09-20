@@ -1,0 +1,74 @@
+<div class="min-h-screen w-full grid md:grid-cols-2 bg-gradient-to-br from-teal-100 via-white to-teal-50">
+
+  <!-- LADO IZQUIERDO: Bienvenida -->
+  <div class="flex flex-col justify-center items-center px-8 py-12 bg-gradient-to-br from-teal-700 to-teal-500 text-white relative">
+    <div class="max-w-md text-center md:text-left">
+      <h1 class="text-4xl md:text-5xl font-black mb-4">¡Bienvenido!</h1>
+      <p class="text-lg md:text-xl font-medium mb-6">Tu dinero, tu control.<br>Transferencias en segundos con <span class="font-bold">FlashTransfer</span>.</p>
+      <div class="flex justify-center md:justify-start">
+        <img src="../../../../../assets/img/ethIcon.png" alt="Ilustración" class="w-64 md:w-80 drop-shadow-2xl ml-[60px]">
+      </div>
+    </div>
+  </div>
+
+  <!-- LADO DERECHO: Login -->
+  <div class="flex flex-col justify-center items-center px-8 py-12">
+    <div class="w-full max-w-md bg-white shadow-xl rounded-3xl p-8 border border-gray-200">
+      <h2 class="text-2xl font-extrabold text-teal-700 text-center mb-6">Inicia Sesión</h2>
+
+      <div class="space-y-4">
+        <!-- MetaMask -->
+        <button class="w-full flex items-center justify-between bg-gray-50 border border-gray-200 rounded-xl p-3 hover:shadow-md transition" (click)="connectWithMetaMask()">
+          <div class="flex items-center gap-3">
+            <img src="../../../../../assets/img/metamask.png" class="w-8 h-8" alt="MetaMask">
+            <span class="font-semibold">MetaMask</span>
+          </div>
+          <i class="fas fa-arrow-right text-gray-400"></i>
+        </button>
+
+        <!-- Solana -->
+        <button class="w-full flex items-center justify-between bg-gray-50 border border-gray-200 rounded-xl p-3 hover:shadow-md transition">
+          <div class="flex items-center gap-3">
+            <img src="../../../../../assets/img/solana.png" class="w-8 h-8" alt="Solana">
+            <span class="font-semibold">Solana</span>
+          </div>
+          <i class="fas fa-arrow-right text-gray-400"></i>
+        </button>
+
+        <!-- Google -->
+        <button class="w-full flex items-center justify-between bg-gray-50 border border-gray-200 rounded-xl p-3 hover:shadow-md transition">
+          <div class="flex items-center gap-3">
+            <i class="fab fa-google text-red-500 text-xl"></i>
+            <span class="font-semibold">Google</span>
+          </div>
+          <i class="fas fa-arrow-right text-gray-400"></i>
+        </button>
+
+        <!-- Separador -->
+        <div class="flex items-center my-2">
+          <div class="flex-grow border-t border-gray-300"></div>
+          <span class="mx-3 text-gray-400 text-sm">o usa otra cuenta</span>
+          <div class="flex-grow border-t border-gray-300"></div>
+        </div>
+
+        <!-- Discord + GitHub -->
+        <div class="flex gap-3">
+          <button class="flex-1 flex items-center justify-center gap-2 bg-gray-50 border border-gray-200 rounded-xl p-3 hover:shadow-md transition">
+            <i class="fab fa-discord text-indigo-600 text-xl"></i>
+            <span class="font-semibold">Discord</span>
+          </button>
+          <button class="flex-1 flex items-center justify-center gap-2 bg-gray-50 border border-gray-200 rounded-xl p-3 hover:shadow-md transition">
+            <i class="fab fa-github text-gray-800 text-xl"></i>
+            <span class="font-semibold">GitHub</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Footer seguridad -->
+      <div class="mt-6 flex items-center gap-2 text-gray-500 text-sm justify-center">
+        <i class="fas fa-shield-alt text-teal-600"></i>
+        <span>Tus datos están protegidos con encriptación</span>
+      </div>
+    </div>
+  </div>
+</div>
