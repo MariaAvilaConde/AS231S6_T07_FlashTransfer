@@ -2,7 +2,7 @@
 pragma solidity ^0.8.20;
 
 /// @title FlashTrans - Transferencias simples de ETH sin intermediarios
-/// @author ...
+/// @author Kasandra Chumpitaz Chipana & Maria Avila Conde
 /// @notice Este contrato permite enviar ETH de un usuario a otro sin necesidad de bancos.
 /// @dev Versión simple: sin roles, sin listas negras ni umbrales de riesgo.
 contract FlashTransSimple {
