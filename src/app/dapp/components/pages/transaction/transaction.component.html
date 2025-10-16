@@ -1,0 +1,249 @@
+<div class="transaction-container">
+  <!-- Toast Notification -->
+  <div class="toast" [class.show]="showToast" [class]="toastType">
+    <span class="toast-icon">
+      <span *ngIf="toastType === 'success'">✅</span>
+      <span *ngIf="toastType === 'error'">❌</span>
+      <span *ngIf="toastType === 'info'">ℹ️</span>
+    </span>
+    <span class="toast-message">{{ toastMessage }}</span>
+    <button class="toast-close" (click)="showToast = false">×</button>
+  </div>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="header-content">
+      <div class="logo" (click)="goToDashboard()">
+        <span class="logo-icon">⚡</span>
+        <span class="logo-text">FlashTransfer</span>
+      </div>
+      
+      <div class="header-actions">
+        <button class="btn-dashboard" (click)="goToDashboard()">
+          📊 Dashboard
+        </button>
+        <div class="wallet-info" *ngIf="isConnected">
+          <span class="network-badge">{{ currentNetwork?.name }}</span>
+          <span class="address" (click)="copyToClipboard(walletAddress, 'Dirección')">
+            {{ formatAddress(walletAddress) }}
+          </span>
+          <button class="btn-disconnect" (click)="disconnectWallet()">
+            Desconectar
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    <div class="content-wrapper">
+      
+      <!-- Hero Section -->
+      <section class="hero-section">
+        <div class="hero-badge">
+          🚀 Transferencias Instantáneas
+        </div>
+        <h1 class="hero-title">
+          Enviar <span class="highlight">{{ currentNetwork?.symbol }}</span>
+        </h1>
+        <p class="hero-subtitle">
+          Realiza transferencias rápidas y seguras en {{ currentNetwork?.name }}
+        </p>
+      </section>
+
+      <!-- Balance Card -->
+      <div class="balance-card">
+        <div class="balance-label">Balance Disponible</div>
+        <div class="balance-amount">
+          {{ balance }} <span class="balance-symbol">{{ currentNetwork?.symbol }}</span>
+        </div>
+        <div class="balance-network">Red: {{ currentNetwork?.name }}</div>
+      </div>
+
+      <!-- Transaction Form -->
+      <div class="transaction-form">
+        <h2 class="form-title">Nueva Transferencia</h2>
+        
+        <div class="form-group">
+          <label for="recipient">Dirección del Destinatario</label>
+          <div class="input-wrapper">
+            <input
+              type="text"
+              id="recipient"
+              [(ngModel)]="recipientAddress"
+              placeholder="0x..."
+              [disabled]="isSending"
+              class="form-input"
+            />
+            <button 
+              class="input-action-btn" 
+              (click)="recipientAddress = ''"
+              *ngIf="recipientAddress && !isSending"
+              title="Limpiar"
+            >
+              ✕
+            </button>
+          </div>
+          <small class="input-hint">Ingresa la dirección de la wallet destino (formato: 0x...)</small>
+        </div>
+
+        <div class="form-group">
+          <label for="amount">Monto a Enviar</label>
+          <div class="input-wrapper">
+            <input
+              type="number"
+              id="amount"
+              [(ngModel)]="amount"
+              placeholder="0.0"
+              step="0.000001"
+              min="0"
+              [max]="balance"
+              [disabled]="isSending"
+              class="form-input"
+            />
+            <button 
+              class="input-action-btn max-btn" 
+              (click)="setMaxAmount()"
+              *ngIf="!isSending"
+              title="Monto máximo"
+            >
+              MAX
+            </button>
+            <span class="input-suffix">{{ currentNetwork?.symbol }}</span>
+          </div>
+          <small class="input-hint">Disponible: {{ balance }} {{ currentNetwork?.symbol }}</small>
+        </div>
+
+        <button
+          class="btn-send"
+          (click)="sendTransaction()"
+          [disabled]="isSending || !recipientAddress || !amount"
+          [class.loading]="isSending"
+        >
+          <span *ngIf="!isSending">💸 Enviar Transferencia</span>
+          <span *ngIf="isSending">
+            <span class="spinner"></span> Procesando...
+          </span>
+        </button>
+
+        <div class="form-info">
+          <div class="info-item">
+            <span class="info-label">⚡ Gas Estimado:</span>
+            <span class="info-value">21,000</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">🔒 Red:</span>
+            <span class="info-value">{{ currentNetwork?.name }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Transaction History -->
+      <div class="transaction-history">
+        <div class="history-header">
+          <h2 class="history-title">
+            📜 Historial de Transacciones
+          </h2>
+          <button 
+            class="btn-clear-history" 
+            (click)="clearTransactionHistory()"
+            *ngIf="transactions.length > 0"
+          >
+            🗑️ Limpiar
+          </button>
+        </div>
+
+        <div *ngIf="transactions.length === 0" class="empty-state">
+          <div class="empty-icon">📭</div>
+          <p class="empty-text">No hay transacciones aún</p>
+          <p class="empty-subtext">Tus transferencias aparecerán aquí</p>
+        </div>
+
+        <div class="transaction-list" *ngIf="transactions.length > 0">
+          <div
+            *ngFor="let tx of transactions"
+            class="transaction-item"
+            [class.pending]="tx.status === 'pending'"
+            [class.success]="tx.status === 'success'"
+            [class.failed]="tx.status === 'failed'"
+          >
+            <div class="tx-icon">
+              <span *ngIf="tx.status === 'pending'" class="pulse">⏳</span>
+              <span *ngIf="tx.status === 'success'">✅</span>
+              <span *ngIf="tx.status === 'failed'">❌</span>
+            </div>
+
+            <div class="tx-details">
+              <div class="tx-addresses">
+                <span class="tx-label">De:</span>
+                <span class="tx-address" (click)="copyToClipboard(tx.from, 'Dirección remitente')">
+                  {{ formatAddress(tx.from) }}
+                </span>
+                <span class="tx-arrow">→</span>
+                <span class="tx-label">A:</span>
+                <span class="tx-address" (click)="copyToClipboard(tx.to, 'Dirección destinatario')">
+                  {{ formatAddress(tx.to) }}
+                </span>
+              </div>
+              
+              <div class="tx-meta">
+                <span class="tx-amount">{{ tx.value }} {{ currentNetwork?.symbol }}</span>
+                <span class="tx-network">{{ tx.network }}</span>
+                <span class="tx-time">{{ tx.timestamp | date: 'short' }}</span>
+              </div>
+
+              <div class="tx-hash">
+                <span class="tx-hash-label">Hash:</span>
+                <span class="tx-hash-value" (click)="copyToClipboard(tx.hash, 'Hash')">
+                  {{ formatAddress(tx.hash) }}
+                </span>
+              </div>
+
+              <div class="tx-actions">
+                <button 
+                  class="btn-action" 
+                  (click)="copyToClipboard(tx.hash, 'Hash')"
+                  title="Copiar hash completo"
+                >
+                  📋 Copiar Hash
+                </button>
+                <button 
+                  class="btn-action" 
+                  (click)="viewOnExplorer(tx.hash)" 
+                  *ngIf="currentNetwork?.explorer"
+                  title="Ver en explorador de bloques"
+                >
+                  🔍 Ver en Explorer
+                </button>
+                <button 
+                  class="btn-action" 
+                  (click)="viewTransactionDetails(tx)"
+                  title="Ver detalles completos"
+                >
+                  ℹ️ Detalles
+                </button>
+              </div>
+            </div>
+
+            <div class="tx-status">
+              <span class="status-badge" [class]="tx.status">
+                {{ tx.status === 'pending' ? 'Pendiente' : tx.status === 'success' ? 'Exitosa' : 'Fallida' }}
+              </span>
+              <div class="tx-block" *ngIf="tx.blockNumber">
+                Bloque: {{ tx.blockNumber }}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <p>⚡ FlashTransfer - Transferencias seguras en blockchain</p>
+    <p class="footer-warning">⚠️ Verifica siempre la dirección del destinatario antes de enviar</p>
+  </footer>
+</div>

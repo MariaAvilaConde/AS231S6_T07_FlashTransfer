@@ -78,7 +78,7 @@ export class MenuComponent implements OnInit {
             {
                   name: "María Avila",
                   role: "Blockchain Developer & Smart Contract Specialist",
-                  photo: "/professional-woman-developer.png",
+                  photo: "/assets/img/maria.jpeg",
             },
             {
                   name: "Kasandra Chumpitaz",

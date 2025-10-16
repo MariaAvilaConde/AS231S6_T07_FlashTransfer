@@ -59,7 +59,7 @@
       <div class="balance-content">
         <div class="main-balance">
           <p class="balance-label">Balance Total</p>
-          <h2 class="balance-amount">{{ ethBalance }} {{ supportedNetworks[chainId]?.nativeCurrency || 'ETH' }}</h2>
+          <h2 class="balance-amount">{{ ethBalance }} {{ getNativeCurrency() }}</h2>
           <p class="balance-usd">${{ usdBalance }} USD</p>
         </div>
 

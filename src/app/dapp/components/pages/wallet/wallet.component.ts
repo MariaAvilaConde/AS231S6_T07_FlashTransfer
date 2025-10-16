@@ -332,6 +332,11 @@ export class WalletComponent implements OnInit, OnDestroy {
     return this.supportedNetworks[chainId]?.name || 'Red Desconocida';
   }
 
+  // Método helper para obtener la moneda nativa
+  getNativeCurrency(): string {
+    return this.supportedNetworks[this.chainId]?.nativeCurrency || 'ETH';
+  }
+
   formatAddress(address: string): string {
     return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
   }
@@ -350,7 +355,8 @@ export class WalletComponent implements OnInit, OnDestroy {
   }
 
   sendTokens() {
-    alert('Función de envío próximamente');
+    // Navegar a la vista de transacciones
+    this.router.navigate(['/transaction']);
   }
 
   receiveTokens() {
