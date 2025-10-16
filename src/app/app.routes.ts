@@ -16,9 +16,9 @@ export const routes: Routes = [
   },
   {
     path: 'dashboard',
-    title: 'Dashboard General',
+    title: 'Mi Wallet - Dashboard',
     loadComponent: () =>
-      import('../app/dapp/components/pages/dashboard/dashboard.component').then(m => m.DashboardComponent),
+      import('../app/dapp/components/pages/wallet/wallet.component').then(m => m.WalletComponent),
     canActivate: [AuthGuard]
   },
   {

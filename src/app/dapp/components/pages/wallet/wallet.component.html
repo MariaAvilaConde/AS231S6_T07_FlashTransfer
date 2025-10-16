@@ -1,0 +1,147 @@
+<div class="wallet-container">
+  <!-- Header -->
+  <header class="wallet-header">
+    <div class="header-content">
+      <div class="logo">
+        <span class="logo-icon">⚡</span>
+        <h1 class="logo-text">FlashTransfer</h1>
+      </div>
+      <div class="header-actions">
+        <!-- Selector de Red -->
+        <div class="network-selector">
+          <select (change)="switchNetwork($any($event.target).value)" [value]="chainId" class="network-select">
+            <option value="0xaa36a7">Sepolia</option>
+            <option value="0x4268">Holesky</option>
+            <option value="0x1">Ethereum</option>
+            <option value="0x5">Goerli</option>
+            <option value="0x89">Polygon</option>
+            <option value="0x13881">Mumbai</option>
+          </select>
+        </div>
+        <button class="disconnect-btn" (click)="disconnect()">
+          <span>🚪</span> Desconectar
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Loading State -->
+  <div *ngIf="isLoading" class="loading-screen">
+    <div class="loader"></div>
+    <p>Cargando datos de tu wallet...</p>
+  </div>
+
+  <!-- Main Content -->
+  <main *ngIf="!isLoading" class="wallet-main">
+    <!-- Wallet Info Card -->
+    <div class="balance-card">
+      <div class="balance-header">
+        <div class="wallet-info">
+          <div class="network-badge">
+            <span class="network-dot"></span>
+            {{ networkName }}
+          </div>
+          <div class="address-section">
+            <p class="address-label">Tu Dirección</p>
+            <div class="address-display">
+              <span class="address">{{ formatAddress(walletAddress) }}</span>
+              <button class="copy-btn" (click)="copyAddress()" title="Copiar dirección">
+                📋
+              </button>
+            </div>
+          </div>
+        </div>
+        <button class="refresh-btn" (click)="refreshBalance()" title="Actualizar saldo">
+          🔄
+        </button>
+      </div>
+
+      <div class="balance-content">
+        <div class="main-balance">
+          <p class="balance-label">Balance Total</p>
+          <h2 class="balance-amount">{{ ethBalance }} {{ supportedNetworks[chainId]?.nativeCurrency || 'ETH' }}</h2>
+          <p class="balance-usd">${{ usdBalance }} USD</p>
+        </div>
+
+        <div class="action-buttons">
+          <button class="action-btn send-btn" (click)="sendTokens()">
+            <span class="btn-icon">↑</span>
+            <span>Enviar</span>
+          </button>
+          <button class="action-btn receive-btn" (click)="receiveTokens()">
+            <span class="btn-icon">↓</span>
+            <span>Recibir</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tokens List -->
+    <div class="tokens-section">
+      <h3 class="section-title">
+        <span class="title-icon">💰</span>
+        Tus Tokens
+      </h3>
+      <div class="tokens-list">
+        <div *ngFor="let token of tokenBalances" class="token-item">
+          <div class="token-icon">{{ token.icon }}</div>
+          <div class="token-info">
+            <p class="token-symbol">{{ token.symbol }}</p>
+            <p class="token-balance">{{ token.balance }}</p>
+          </div>
+          <div class="token-value">
+            <p class="token-usd">${{ token.usdValue }}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Recent Transactions -->
+    <div class="transactions-section">
+      <h3 class="section-title">
+        <span class="title-icon">📊</span>
+        Transacciones Recientes
+      </h3>
+      <div class="transactions-list">
+        <div *ngFor="let tx of recentTransactions" class="transaction-item">
+          <div class="tx-icon" [class.tx-send]="tx.type === 'send'" [class.tx-receive]="tx.type === 'receive'">
+            {{ tx.type === 'send' ? '↑' : '↓' }}
+          </div>
+          <div class="tx-info">
+            <p class="tx-address">{{ tx.address }}</p>
+            <p class="tx-time">{{ tx.time }}</p>
+          </div>
+          <div class="tx-amount" [class.tx-negative]="tx.type === 'send'" [class.tx-positive]="tx.type === 'receive'">
+            <p class="amount">{{ tx.amount }}</p>
+            <span class="tx-status">✓</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Quick Stats -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-icon">⚡</div>
+        <div class="stat-content">
+          <p class="stat-label">Transacciones</p>
+          <p class="stat-value">{{ recentTransactions.length }}</p>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">🌐</div>
+        <div class="stat-content">
+          <p class="stat-label">Red</p>
+          <p class="stat-value">{{ chainId }}</p>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">💎</div>
+        <div class="stat-content">
+          <p class="stat-label">Tokens</p>
+          <p class="stat-value">{{ tokenBalances.length }}</p>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
