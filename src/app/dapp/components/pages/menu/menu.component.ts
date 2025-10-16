@@ -83,7 +83,7 @@ export class MenuComponent implements OnInit {
             {
                   name: "Kasandra Chumpitaz",
                   role: "Full Stack Developer & Web3 Engineer",
-                  photo: "/professional-woman-engineer.png",
+                  photo: "/assets/img/yo.png",
             },
       ]
 
