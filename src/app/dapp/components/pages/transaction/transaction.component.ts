@@ -2,7 +2,8 @@ import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
+import { catchError, of } from 'rxjs';
 
 interface Transaction {
   hash: string;
@@ -25,6 +26,7 @@ interface Network {
   decimals: number;
   explorer: string;
   apiUrl: string;
+  apiKey?: string;
 }
 
 @Component({
@@ -55,13 +57,6 @@ export class TransactionComponent implements OnInit {
   toastMessage = '';
   toastType: 'success' | 'error' | 'info' = 'info';
   
-  // API Keys (deberías usar variables de entorno en producción)
-  private readonly API_KEYS = {
-    etherscan: '91WBR32VV7QPMZCNPQP8U557NTBWB969TG',
-    polygonscan: '91WBR32VV7QPMZCNPQP8U557NTBWB969TG',
-    bscscan: '91WBR32VV7QPMZCNPQP8U557NTBWB969TG'
-  };
-  
   // Supported networks
   networks: { [key: string]: Network } = {
     '0x1': {
@@ -72,22 +67,6 @@ export class TransactionComponent implements OnInit {
       explorer: 'https://etherscan.io',
       apiUrl: 'https://api.etherscan.io/api'
     },
-    '0x89': {
-      chainId: '0x89',
-      name: 'Polygon',  
-      symbol: 'MATIC',
-      decimals: 18,
-      explorer: 'https://polygonscan.com',
-      apiUrl: 'https://api.polygonscan.com/api'
-    },
-    '0x38': {
-      chainId: '0x38',
-      name: 'BSC',
-      symbol: 'BNB',
-      decimals: 18,
-      explorer: 'https://bscscan.com',
-      apiUrl: 'https://api.bscscan.com/api'
-    },
     '0xaa36a7': {
       chainId: '0xaa36a7',
       name: 'Sepolia Testnet',
@@ -95,30 +74,6 @@ export class TransactionComponent implements OnInit {
       decimals: 18,
       explorer: 'https://sepolia.etherscan.io',
       apiUrl: 'https://api-sepolia.etherscan.io/api'
-    },
-    '0x13882': {
-      chainId: '0x13882',
-      name: 'Polygon Amoy',
-      symbol: 'MATIC',
-      decimals: 18,
-      explorer: 'https://amoy.polygonscan.com',
-      apiUrl: 'https://api-amoy.polygonscan.com/api'
-    },
-    '0xa4b1': {
-      chainId: '0xa4b1',
-      name: 'Arbitrum',
-      symbol: 'ETH',
-      decimals: 18,
-      explorer: 'https://arbiscan.io',
-      apiUrl: 'https://api.arbiscan.io/api'
-    },
-    '0xa': {
-      chainId: '0xa',
-      name: 'Optimism',
-      symbol: 'ETH',
-      decimals: 18,
-      explorer: 'https://optimistic.etherscan.io',
-      apiUrl: 'https://api-optimistic.etherscan.io/api'
     }
   };
 
@@ -141,7 +96,7 @@ export class TransactionComponent implements OnInit {
           this.isConnected = true;
           await this.loadNetworkInfo();
           await this.loadBalance();
-          await this.loadAllNetworkTransactions();
+          this.loadLocalTransactions();
         } else {
           this.router.navigate(['/']);
         }
@@ -158,23 +113,21 @@ export class TransactionComponent implements OnInit {
 
   setupEventListeners() {
     if (typeof window !== 'undefined' && (window as any).ethereum) {
-      // Detectar cambio de cuenta
       (window as any).ethereum.on('accountsChanged', async (accounts: string[]) => {
         if (accounts.length > 0) {
           this.walletAddress = accounts[0];
           await this.loadBalance();
-          await this.loadAllNetworkTransactions();
+          this.loadLocalTransactions();
           this.showNotification('Cuenta cambiada exitosamente', 'info');
         } else {
           this.router.navigate(['/']);
         }
       });
 
-      // Detectar cambio de red
       (window as any).ethereum.on('chainChanged', async (chainId: string) => {
         this.currentNetwork = this.networks[chainId] || null;
         await this.loadBalance();
-        await this.loadAllNetworkTransactions();
+        this.loadLocalTransactions();
         this.showNotification(`Red cambiada a: ${this.currentNetwork?.name}`, 'info');
       });
     }
@@ -206,7 +159,6 @@ export class TransactionComponent implements OnInit {
         params: [this.walletAddress, 'latest']
       });
       
-      // Convertir de Wei a ETH/token nativo
       const balanceInEth = parseInt(balance, 16) / Math.pow(10, 18);
       this.balance = balanceInEth.toFixed(6);
     } catch (error) {
@@ -214,134 +166,31 @@ export class TransactionComponent implements OnInit {
     }
   }
 
-  async loadAllNetworkTransactions() {
-    this.isLoadingTransactions = true;
-    
-    try {
-      const allTransactions: Transaction[] = [];
-      
-      // Si showAllNetworks es true, cargar de todas las redes, sino solo de la actual
-      const networksToLoad = this.showAllNetworks 
-        ? Object.keys(this.networks) 
-        : [this.currentNetwork?.chainId];
-      
-      for (const chainId of networksToLoad) {
-        if (chainId) {
-          try {
-            const networkTxs = await this.loadTransactionsForNetwork(chainId);
-            allTransactions.push(...networkTxs);
-          } catch (error) {
-            console.warn(`Error loading transactions for network ${chainId}:`, error);
-          }
-        }
-      }
-      
-      // Ordenar por timestamp (más recientes primero)
-      this.transactions = allTransactions.sort((a, b) => 
-        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-      );
-      
-      this.showNotification(`Cargadas ${this.transactions.length} transacciones`, 'success');
-      
-    } catch (error) {
-      console.error('Error loading all transactions:', error);
-      this.showNotification('Error al cargar el historial completo', 'error');
-      this.loadTransactionHistory(); // Fallback
-    } finally {
-      this.isLoadingTransactions = false;
-    }
-  }
-
-  async loadTransactionsForNetwork(chainId: string): Promise<Transaction[]> {
-    const network = this.networks[chainId];
-    if (!network?.apiUrl) {
-      return [];
-    }
-
-    try {
-      const apiKey = this.getApiKeyForNetwork(chainId);
-      const apiUrl = `${network.apiUrl}?module=account&action=txlist&address=${this.walletAddress}&startblock=0&endblock=99999999&page=1&offset=20&sort=desc&apikey=${apiKey}`;
-      
-      const response: any = await this.http.get(apiUrl).toPromise();
-      
-      if (response.status === '1' && response.result) {
-        return response.result.map((tx: any) => ({
-          hash: tx.hash,
-          from: tx.from,
-          to: tx.to,
-          value: (parseInt(tx.value) / Math.pow(10, network.decimals)).toFixed(6),
-          timestamp: new Date(parseInt(tx.timeStamp) * 1000),
-          status: tx.isError === '0' ? 'success' : 'failed',
-          network: network.name,
-          chainId: chainId,
-          gasUsed: tx.gasUsed,
-          blockNumber: parseInt(tx.blockNumber),
-          explorerUrl: `${network.explorer}/tx/${tx.hash}`
-        }));
-      }
-      
-      return [];
-    } catch (error) {
-      console.error(`Error loading transactions for ${network.name}:`, error);
-      return [];
-    }
-  }
-
-  getApiKeyForNetwork(chainId: string): string {
-    const networkNames: { [key: string]: string } = {
-      '0x1': 'etherscan',
-      '0xaa36a7': 'etherscan',
-      '0x89': 'polygonscan',
-      '0x13882': 'polygonscan',
-      '0x38': 'bscscan',
-      '0xa4b1': 'etherscan', // Arbitrum usa API de Etherscan
-      '0xa': 'etherscan' // Optimism usa API de Etherscan
-    };
-    
-    const networkName = networkNames[chainId];
-    return this.API_KEYS[networkName as keyof typeof this.API_KEYS] || this.API_KEYS.etherscan;
-  }
-
-  mergePendingTransactions() {
-    const stored = sessionStorage.getItem(`transactions_${this.walletAddress}`);
+  loadLocalTransactions() {
+    const stored = localStorage.getItem(`transactions_${this.walletAddress}`);
     if (stored) {
       try {
-        const localTxs: Transaction[] = JSON.parse(stored).map((tx: any) => ({
+        const storageData = JSON.parse(stored);
+        
+        // Verificar si ha expirado
+        if (storageData.expiresAt && new Date().getTime() > storageData.expiresAt) {
+          localStorage.removeItem(`transactions_${this.walletAddress}`);
+          this.transactions = [];
+          return;
+        }
+        
+        const localTxs: Transaction[] = (storageData.transactions || []).map((tx: any) => ({
           ...tx,
           timestamp: new Date(tx.timestamp)
         }));
 
-        localTxs.forEach(localTx => {
-          if (localTx.status === 'pending') {
-            const exists = this.transactions.some(tx => tx.hash === localTx.hash);
-            if (!exists) {
-              this.transactions.unshift(localTx);
-              this.checkTransactionStatus(localTx.hash);
-            }
-          }
-        });
+        this.transactions = localTxs.sort((a, b) => 
+          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+        );
+
+        this.showNotification(`Cargadas ${this.transactions.length} transacciones`, 'success');
       } catch (error) {
         console.error('Error parsing local transactions:', error);
-      }
-    }
-  }
-
-  loadTransactionHistory() {
-    const stored = sessionStorage.getItem(`transactions_${this.walletAddress}`);
-    if (stored) {
-      try {
-        this.transactions = JSON.parse(stored).map((tx: any) => ({
-          ...tx,
-          timestamp: new Date(tx.timestamp)
-        }));
-        
-        this.transactions.forEach(tx => {
-          if (tx.status === 'pending') {
-            this.checkTransactionStatus(tx.hash);
-          }
-        });
-      } catch (error) {
-        console.error('Error parsing transactions:', error);
         this.transactions = [];
       }
     }
@@ -358,12 +207,17 @@ export class TransactionComponent implements OnInit {
     
     const recentTxs = this.transactions.filter(t => 
       t.status === 'pending' || 
-      (new Date().getTime() - t.timestamp.getTime()) < 24 * 60 * 60 * 1000
+      (new Date().getTime() - t.timestamp.getTime()) < 7 * 24 * 60 * 60 * 1000
     );
     
-    sessionStorage.setItem(
+    const storageData = {
+      transactions: recentTxs,
+      expiresAt: new Date().getTime() + (7 * 24 * 60 * 60 * 1000)
+    };
+    
+    localStorage.setItem(
       `transactions_${this.walletAddress}`,
-      JSON.stringify(recentTxs)
+      JSON.stringify(storageData)
     );
   }
 
@@ -476,7 +330,6 @@ export class TransactionComponent implements OnInit {
             tx.gasUsed = receipt.gasUsed;
             tx.blockNumber = parseInt(receipt.blockNumber, 16);
             
-            // Actualizar explorerUrl con la red correcta
             const network = this.networks[this.currentNetwork?.chainId || '0x1'];
             if (network?.explorer) {
               tx.explorerUrl = `${network.explorer}/tx/${txHash}`;
@@ -488,11 +341,6 @@ export class TransactionComponent implements OnInit {
             this.showNotification(`Transacción ${statusText}`, tx.status === 'success' ? 'success' : 'error');
             
             await this.loadBalance();
-            
-            // Recargar desde explorers después de confirmación
-            setTimeout(() => {
-              this.loadAllNetworkTransactions();
-            }, 3000);
           }
           return;
         }
@@ -501,7 +349,6 @@ export class TransactionComponent implements OnInit {
         if (attempts < maxAttempts) {
           setTimeout(checkStatus, 3000);
         } else {
-          // Si después de muchos intentos no se confirma, marcar como fallida
           const tx = this.transactions.find(t => t.hash === txHash);
           if (tx && tx.status === 'pending') {
             tx.status = 'failed';
@@ -536,7 +383,6 @@ export class TransactionComponent implements OnInit {
   }
 
   viewOnExplorer(txHash: string, chainId?: string) {
-    // Usar la chainId de la transacción si está disponible, sino la red actual
     const targetChainId = chainId || this.currentNetwork?.chainId;
     const network = this.networks[targetChainId || ''];
     
@@ -546,12 +392,6 @@ export class TransactionComponent implements OnInit {
     } else {
       this.showNotification('Explorer no disponible para esta red', 'info');
     }
-  }
-
-  getExplorerUrl(txHash: string, chainId?: string): string {
-    const targetChainId = chainId || this.currentNetwork?.chainId;
-    const network = this.networks[targetChainId || ''];
-    return network?.explorer ? `${network.explorer}/tx/${txHash}` : '#';
   }
 
   viewTransactionDetails(tx: Transaction) {
@@ -591,7 +431,7 @@ Explorer: ${explorerUrl}
   }
 
   disconnectWallet() {
-    sessionStorage.removeItem(`transactions_${this.walletAddress}`);
+    localStorage.removeItem(`transactions_${this.walletAddress}`);
     this.walletAddress = '';
     this.isConnected = false;
     this.transactions = [];
@@ -605,18 +445,18 @@ Explorer: ${explorerUrl}
 
   async refreshTransactions() {
     this.showNotification('Actualizando transacciones...', 'info');
-    await this.loadAllNetworkTransactions();
+    this.loadLocalTransactions();
   }
 
   toggleAllNetworks() {
     this.showAllNetworks = !this.showAllNetworks;
-    this.loadAllNetworkTransactions();
+    this.loadLocalTransactions();
   }
 
   clearTransactionHistory() {
-    if (confirm('¿Estás seguro de que deseas borrar el historial local? (Las transacciones se recargarán desde los explorers)')) {
-      sessionStorage.removeItem(`transactions_${this.walletAddress}`);
-      this.loadAllNetworkTransactions();
+    if (confirm('¿Estás seguro de que deseas borrar el historial local?')) {
+      localStorage.removeItem(`transactions_${this.walletAddress}`);
+      this.transactions = [];
       this.showNotification('Historial local eliminado', 'info');
     }
   }
@@ -641,7 +481,7 @@ Explorer: ${explorerUrl}
 
   filterTransactionsByNetwork(networkName: string) {
     if (!networkName) {
-      this.loadAllNetworkTransactions();
+      this.loadLocalTransactions();
       return;
     }
     
