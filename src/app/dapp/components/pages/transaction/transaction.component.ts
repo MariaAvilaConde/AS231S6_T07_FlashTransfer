@@ -1,9 +1,12 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { catchError, of } from 'rxjs';
+import { catchError, of, Subscription } from 'rxjs';
+import { WalletService } from '../../../service/wallet.service';
+import { EtherscanService, EtherscanTransaction } from '../../../service/etherscan.service';
+import { NetworkService, Network as NetworkModel } from '../../../service/network.service';
 
 interface Transaction {
   hash: string;
@@ -19,15 +22,16 @@ interface Transaction {
   explorerUrl?: string;
 }
 
-interface Network {
-  chainId: string;
-  name: string;
-  symbol: string;
-  decimals: number;
-  explorer: string;
-  apiUrl: string;
-  apiKey?: string;
-}
+// Remove the local Network interface since we're using the one from NetworkService
+// interface Network {
+//   chainId: string;
+//   name: string;
+//   symbol: string;
+//   decimals: number;
+//   explorer: string;
+//   apiUrl: string;
+//   apiKey?: string;
+// }
 
 @Component({
   selector: 'app-transaction',
@@ -36,11 +40,12 @@ interface Network {
   templateUrl: './transaction.component.html',
   styleUrl: './transaction.component.css'
 })
-export class TransactionComponent implements OnInit {
+export class TransactionComponent implements OnInit, OnDestroy {
   walletAddress = '';
   isConnected = false;
-  currentNetwork: Network | null = null;
+  currentNetwork: NetworkModel | null = null;
   balance = '0';
+  gasEstimate = '0.0001'; // Default gas estimate
   
   // Form data
   recipientAddress = '';
@@ -57,34 +62,47 @@ export class TransactionComponent implements OnInit {
   toastMessage = '';
   toastType: 'success' | 'error' | 'info' = 'info';
   
-  // Supported networks
-  networks: { [key: string]: Network } = {
-    '0x1': {
-      chainId: '0x1',
-      name: 'Ethereum Mainnet',
-      symbol: 'ETH',
-      decimals: 18,
-      explorer: 'https://etherscan.io',
-      apiUrl: 'https://api.etherscan.io/api'
-    },
-    '0xaa36a7': {
-      chainId: '0xaa36a7',
-      name: 'Sepolia Testnet',
-      symbol: 'ETH',
-      decimals: 18,
-      explorer: 'https://sepolia.etherscan.io',
-      apiUrl: 'https://api-sepolia.etherscan.io/api'
-    }
-  };
+  // Remove local networks definition since we're using NetworkService
 
-  constructor(private router: Router, private http: HttpClient) {}
+  constructor(
+    private router: Router, 
+    private http: HttpClient, 
+    private walletService: WalletService,
+    private etherscanService: EtherscanService,
+    private networkService: NetworkService
+  ) {}
+
+  private networkSubscription: Subscription = new Subscription();
 
   ngOnInit() {
     this.initWallet();
     this.setupEventListeners();
+    
+    // Subscribe to network changes
+    this.networkSubscription = this.networkService.currentNetwork$.subscribe(
+      network => {
+        if (network) {
+          this.currentNetwork = network;
+          this.loadBalance();
+          this.loadLocalTransactions();
+        }
+      }
+    );
   }
 
-  async initWallet() {
+  ngOnDestroy() {
+    // Clean up subscription
+    if (this.networkSubscription) {
+      this.networkSubscription.unsubscribe();
+    }
+    
+    // Remove event listeners
+    if (typeof window !== 'undefined' && (window as any).ethereum) {
+      (window as any).ethereum.removeAllListeners();
+    }
+  }
+
+  private async initWallet() {
     if (typeof window !== 'undefined' && (window as any).ethereum) {
       try {
         const accounts = await (window as any).ethereum.request({
@@ -100,7 +118,7 @@ export class TransactionComponent implements OnInit {
         } else {
           this.router.navigate(['/']);
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error initializing wallet:', error);
         this.showNotification('Error al inicializar la wallet', 'error');
         this.router.navigate(['/']);
@@ -124,75 +142,166 @@ export class TransactionComponent implements OnInit {
         }
       });
 
-      (window as any).ethereum.on('chainChanged', async (chainId: string) => {
-        this.currentNetwork = this.networks[chainId] || null;
-        await this.loadBalance();
-        this.loadLocalTransactions();
-        this.showNotification(`Red cambiada a: ${this.currentNetwork?.name}`, 'info');
-      });
+      // Remove the chainChanged listener here since we're handling it globally
+      // (window as any).ethereum.on('chainChanged', async (chainId: string) => {
+      //   this.currentNetwork = this.networks[chainId] || null;
+      //   await this.loadBalance();
+      //   this.loadLocalTransactions();
+      //   this.showNotification(`Red cambiada a: ${this.currentNetwork?.name}`, 'info');
+      // });
     }
   }
 
-  async loadNetworkInfo() {
+  private async loadNetworkInfo() {
     try {
-      const chainId = await (window as any).ethereum.request({
-        method: 'eth_chainId'
-      });
-      
-      this.currentNetwork = this.networks[chainId] || {
-        chainId: chainId,
-        name: 'Red Desconocida',
-        symbol: 'ETH',
-        decimals: 18,
-        explorer: '',
-        apiUrl: ''
-      };
-    } catch (error) {
+      // Get current network from the network service instead
+      const currentNetwork = this.networkService.getCurrentNetwork();
+      if (currentNetwork) {
+        this.currentNetwork = currentNetwork;
+      } else {
+        // Fallback to getting chainId from ethereum
+        const chainId = await (window as any).ethereum.request({
+          method: 'eth_chainId'
+        });
+        
+        this.currentNetwork = this.networkService.getNetworkByChainId(chainId) || {
+          chainId: chainId,
+          name: 'Red Desconocida',
+          symbol: 'ETH',
+          decimals: 18,
+          explorer: '',
+          apiUrl: ''
+        };
+      }
+    } catch (error: any) {
       console.error('Error loading network:', error);
     }
   }
 
-  async loadBalance() {
+  private async loadBalance() {
     try {
-      const balance = await (window as any).ethereum.request({
-        method: 'eth_getBalance',
-        params: [this.walletAddress, 'latest']
-      });
-      
-      const balanceInEth = parseInt(balance, 16) / Math.pow(10, 18);
-      this.balance = balanceInEth.toFixed(6);
-    } catch (error) {
+      if (this.currentNetwork && this.walletAddress) {
+        const balance = await this.walletService.getBalance(this.walletAddress, this.currentNetwork.chainId);
+        this.balance = parseFloat(balance).toFixed(6);
+        // Save balance to localStorage as backup
+        localStorage.setItem(`balance_${this.walletAddress}_${this.currentNetwork.chainId}`, this.balance);
+      }
+    } catch (error: any) {
       console.error('Error loading balance:', error);
+      // Try to load from localStorage as fallback
+      const storedBalance = localStorage.getItem(`balance_${this.walletAddress}_${this.currentNetwork?.chainId}`);
+      if (storedBalance) {
+        this.balance = storedBalance;
+      }
     }
   }
 
-  loadLocalTransactions() {
+  private async loadLocalTransactions() {
+    // First try to load from localStorage
     const stored = localStorage.getItem(`transactions_${this.walletAddress}`);
+    let localTxs: Transaction[] = [];
+    
     if (stored) {
       try {
         const storageData = JSON.parse(stored);
         
-        // Verificar si ha expirado
+        // Verificar si ha expirado (7 días)
         if (storageData.expiresAt && new Date().getTime() > storageData.expiresAt) {
           localStorage.removeItem(`transactions_${this.walletAddress}`);
-          this.transactions = [];
-          return;
+          console.log('Local storage data expired, cleared');
+        } else {
+          localTxs = (storageData.transactions || []).map((tx: any) => ({
+            ...tx,
+            timestamp: new Date(tx.timestamp)
+          }));
         }
+      } catch (error: any) {
+        console.error('Error parsing local transactions:', error);
+        // Clear corrupted data
+        localStorage.removeItem(`transactions_${this.walletAddress}`);
+      }
+    }
+    
+    // Show local transactions first
+    this.transactions = localTxs.sort((a, b) => 
+      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+    
+    if (localTxs.length > 0) {
+      this.showNotification(`Cargadas ${localTxs.length} transacciones locales`, 'success');
+    }
+    
+    // Then try to load from Etherscan API
+    if (this.currentNetwork && this.walletAddress) {
+      this.isLoadingTransactions = true;
+      try {
+        const networkMap: { [key: string]: string } = {
+          '0x1': 'ETH Mainnet',
+          '0xaa36a7': 'ETH Sepolia'
+        };
         
-        const localTxs: Transaction[] = (storageData.transactions || []).map((tx: any) => ({
-          ...tx,
-          timestamp: new Date(tx.timestamp)
-        }));
-
+        const networkName = networkMap[this.currentNetwork.chainId] || 'ETH Mainnet';
+        
+        this.etherscanService.getAllTransactions(this.walletAddress, networkName).subscribe(
+          (etherscanTxs: EtherscanTransaction[]) => {
+            const mappedTxs: Transaction[] = etherscanTxs.map(tx => ({
+              hash: tx.hash,
+              from: tx.from,
+              to: tx.to,
+              value: tx.amount,
+              timestamp: new Date(tx.timestamp),
+              status: tx.isError ? 'failed' : 'success',
+              network: tx.network,
+              chainId: this.currentNetwork?.chainId || '0x1',
+              explorerUrl: this.etherscanService.getExplorerUrl(tx.network, tx.hash)
+            }));
+            
+            // Merge with existing local transactions
+            const mergedTxs = [...mappedTxs, ...localTxs];
+            const uniqueTxs = mergedTxs.filter((tx, index, self) => 
+              index === self.findIndex(t => t.hash === tx.hash)
+            );
+            
+            this.transactions = uniqueTxs.sort((a, b) => 
+              new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+            );
+            
+            // Save merged transactions to localStorage as backup
+            this.saveTransactionsToLocalStorage(this.transactions);
+            
+            if (mappedTxs.length > 0) {
+              this.showNotification(`Cargadas ${mappedTxs.length} transacciones desde Etherscan`, 'success');
+            } else {
+              this.showNotification('No se encontraron transacciones en Etherscan', 'info');
+            }
+            
+            this.isLoadingTransactions = false;
+          },
+          (error) => {
+            console.error('Error loading Etherscan transactions:', error);
+            this.showNotification('Error al cargar transacciones desde Etherscan: ' + (error.message || 'Error desconocido'), 'error');
+            // Still show local transactions if Etherscan fails
+            this.transactions = localTxs.sort((a, b) => 
+              new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+            );
+            this.isLoadingTransactions = false;
+          }
+        );
+      } catch (error: any) {
+        console.error('Error initiating Etherscan API call:', error);
+        this.showNotification('Error al iniciar llamada a Etherscan: ' + (error.message || 'Error desconocido'), 'error');
+        // Still show local transactions if Etherscan fails
         this.transactions = localTxs.sort((a, b) => 
           new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
         );
-
-        this.showNotification(`Cargadas ${this.transactions.length} transacciones`, 'success');
-      } catch (error) {
-        console.error('Error parsing local transactions:', error);
-        this.transactions = [];
+        this.isLoadingTransactions = false;
       }
+    } else {
+      // If no network or wallet, at least show local transactions
+      this.transactions = localTxs.sort((a, b) => 
+        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      );
+      this.isLoadingTransactions = false;
     }
   }
 
@@ -205,20 +314,34 @@ export class TransactionComponent implements OnInit {
       this.transactions.unshift(tx);
     }
     
-    const recentTxs = this.transactions.filter(t => 
-      t.status === 'pending' || 
-      (new Date().getTime() - t.timestamp.getTime()) < 7 * 24 * 60 * 60 * 1000
-    );
-    
-    const storageData = {
-      transactions: recentTxs,
-      expiresAt: new Date().getTime() + (7 * 24 * 60 * 60 * 1000)
-    };
-    
-    localStorage.setItem(
-      `transactions_${this.walletAddress}`,
-      JSON.stringify(storageData)
-    );
+    this.saveTransactionsToLocalStorage(this.transactions);
+  }
+
+  private saveTransactionsToLocalStorage(transactions: Transaction[]) {
+    try {
+      const recentTxs = transactions.filter(t => 
+        t.status === 'pending' || 
+        (new Date().getTime() - t.timestamp.getTime()) < 7 * 24 * 60 * 60 * 1000
+      );
+      
+      const storageData = {
+        transactions: recentTxs,
+        expiresAt: new Date().getTime() + (7 * 24 * 60 * 60 * 1000)
+      };
+      
+      localStorage.setItem(
+        `transactions_${this.walletAddress}`,
+        JSON.stringify(storageData)
+      );
+    } catch (error) {
+      console.error('Error saving transactions to localStorage:', error);
+      // If localStorage fails, try to clear it to prevent corruption
+      try {
+        localStorage.removeItem(`transactions_${this.walletAddress}`);
+      } catch (clearError) {
+        console.error('Error clearing localStorage:', clearError);
+      }
+    }
   }
 
   async sendTransaction() {
@@ -312,7 +435,7 @@ export class TransactionComponent implements OnInit {
     }
   }
 
-  async checkTransactionStatus(txHash: string) {
+  private async checkTransactionStatus(txHash: string) {
     let attempts = 0;
     const maxAttempts = 40;
 
@@ -330,7 +453,7 @@ export class TransactionComponent implements OnInit {
             tx.gasUsed = receipt.gasUsed;
             tx.blockNumber = parseInt(receipt.blockNumber, 16);
             
-            const network = this.networks[this.currentNetwork?.chainId || '0x1'];
+            const network = this.networkService.getNetworkByChainId(this.currentNetwork?.chainId || '') || this.networkService.getCurrentNetwork();
             if (network?.explorer) {
               tx.explorerUrl = `${network.explorer}/tx/${txHash}`;
             }
@@ -356,7 +479,7 @@ export class TransactionComponent implements OnInit {
             this.showNotification('Transacción expirada o fallida', 'error');
           }
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error checking transaction status:', error);
       }
     };
@@ -384,7 +507,7 @@ export class TransactionComponent implements OnInit {
 
   viewOnExplorer(txHash: string, chainId?: string) {
     const targetChainId = chainId || this.currentNetwork?.chainId;
-    const network = this.networks[targetChainId || ''];
+    const network = this.networkService.getNetworkByChainId(targetChainId || '') || this.networkService.getCurrentNetwork();
     
     if (network?.explorer) {
       const explorerUrl = `${network.explorer}/tx/${txHash}`;
@@ -395,7 +518,7 @@ export class TransactionComponent implements OnInit {
   }
 
   viewTransactionDetails(tx: Transaction) {
-    const network = this.networks[tx.chainId];
+    const network = this.networkService.getNetworkByChainId(tx.chainId) || this.networkService.getCurrentNetwork();
     const explorerUrl = network?.explorer ? `${network.explorer}/tx/${tx.hash}` : 'No disponible';
     
     const details = `
@@ -431,11 +554,29 @@ Explorer: ${explorerUrl}
   }
 
   disconnectWallet() {
+    console.log('Disconnecting wallet from transaction page...');
+    // Remove event listeners
+    if (typeof window !== 'undefined' && (window as any).ethereum) {
+      (window as any).ethereum.removeAllListeners();
+    }
+    
+    // Clear local storage
     localStorage.removeItem(`transactions_${this.walletAddress}`);
+    localStorage.removeItem('account');
+    
+    // Clear wallet data
     this.walletAddress = '';
     this.isConnected = false;
     this.transactions = [];
-    this.router.navigate(['/']);
+    
+    // Clear balance cache
+    this.balance = '0';
+    
+    // Use wallet service to properly logout
+    this.walletService.logout();
+    
+    // Navigate to login page
+    this.router.navigate(['/login']);
   }
 
   setMaxAmount() {
@@ -443,9 +584,24 @@ Explorer: ${explorerUrl}
     this.amount = maxSendable.toFixed(6);
   }
 
+  // Method to handle address input
+  onAddressInput(event: any) {
+    // Add any validation or formatting logic here if needed
+    this.recipientAddress = event.target.value;
+  }
+
+  // Method to handle amount input
+  onAmountInput(event: any) {
+    // Add any validation or formatting logic here if needed
+    this.amount = event.target.value;
+  }
+
   async refreshTransactions() {
     this.showNotification('Actualizando transacciones...', 'info');
-    this.loadLocalTransactions();
+    // Clear current transactions to show loading state
+    this.transactions = [];
+    // Force reload from both localStorage and API
+    await this.loadLocalTransactions();
   }
 
   toggleAllNetworks() {
@@ -458,6 +614,15 @@ Explorer: ${explorerUrl}
       localStorage.removeItem(`transactions_${this.walletAddress}`);
       this.transactions = [];
       this.showNotification('Historial local eliminado', 'info');
+    }
+  }
+
+  backupTransactions() {
+    if (this.transactions.length > 0) {
+      this.saveTransactionsToLocalStorage(this.transactions);
+      this.showNotification(`Respaldo de ${this.transactions.length} transacciones guardado`, 'success');
+    } else {
+      this.showNotification('No hay transacciones para respaldar', 'info');
     }
   }
 
@@ -488,5 +653,15 @@ Explorer: ${explorerUrl}
     this.transactions = this.transactions.filter(tx => 
       tx.network.toLowerCase().includes(networkName.toLowerCase())
     );
+  }
+
+  // Method to switch network
+  async switchNetwork(chainId: string) {
+    const success = await this.walletService.switchNetwork(chainId);
+    if (success) {
+      this.showNotification(`Red cambiada exitosamente`, 'success');
+    } else {
+      this.showNotification(`Error al cambiar de red`, 'error');
+    }
   }
 }

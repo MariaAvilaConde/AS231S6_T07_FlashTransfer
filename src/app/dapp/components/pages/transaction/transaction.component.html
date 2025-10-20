@@ -75,6 +75,7 @@
               placeholder="0x..."
               [disabled]="isSending"
               class="form-input"
+              (input)="onAddressInput($any($event))"
             />
             <button 
               class="input-action-btn" 
@@ -101,6 +102,7 @@
               [max]="balance"
               [disabled]="isSending"
               class="form-input"
+              (input)="onAmountInput($any($event))"
             />
             <button 
               class="input-action-btn max-btn" 
@@ -115,10 +117,16 @@
           <small class="input-hint">Disponible: {{ balance }} {{ currentNetwork?.symbol }}</small>
         </div>
 
+        <!-- Gas Fee Estimation -->
+        <div class="gas-estimation" *ngIf="gasEstimate">
+          <div class="gas-label">Tarifa de Gas Estimada</div>
+          <div class="gas-amount">{{ gasEstimate }} {{ currentNetwork?.symbol }}</div>
+        </div>
+
         <button
           class="btn-send"
           (click)="sendTransaction()"
-          [disabled]="isSending || !recipientAddress || !amount"
+          [disabled]="isSending || !recipientAddress || !amount || !isValidAddress(recipientAddress)"
           [class.loading]="isSending"
         >
           <span *ngIf="!isSending">💸 Enviar Transferencia</span>
@@ -145,13 +153,30 @@
           <h2 class="history-title">
             📜 Historial de Transacciones
           </h2>
-          <button 
-            class="btn-clear-history" 
-            (click)="clearTransactionHistory()"
-            *ngIf="transactions.length > 0"
-          >
-            🗑️ Limpiar
-          </button>
+          <div class="history-actions">
+            <button 
+              class="btn-refresh" 
+              (click)="refreshTransactions()"
+              title="Actualizar"
+            >
+              🔄
+            </button>
+            <button 
+              class="btn-backup" 
+              (click)="backupTransactions()"
+              *ngIf="transactions.length > 0"
+              title="Respaldar transacciones"
+            >
+              💾 Respaldar
+            </button>
+            <button 
+              class="btn-clear-history" 
+              (click)="clearTransactionHistory()"
+              *ngIf="transactions.length > 0"
+            >
+              🗑️ Limpiar
+            </button>
+          </div>
         </div>
 
         <div *ngIf="transactions.length === 0" class="empty-state">

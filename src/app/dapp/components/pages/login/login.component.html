@@ -1,73 +1,138 @@
-<div class="min-h-screen w-full grid md:grid-cols-2 bg-gradient-to-br from-teal-100 via-white to-teal-50">
-
+<div class="min-h-screen w-full grid md:grid-cols-2 bg-gradient-to-br from-teal-50 via-white to-teal-50">
   <!-- LADO IZQUIERDO: Bienvenida -->
-  <div class="flex flex-col justify-center items-center px-8 py-12 bg-gradient-to-br from-teal-700 to-teal-500 text-white relative">
-    <div class="max-w-md text-center md:text-left">
-      <h1 class="text-4xl md:text-5xl font-black mb-4">¡Bienvenido!</h1>
-      <p class="text-lg md:text-xl font-medium mb-6">Tu dinero, tu control.<br>Transferencias en segundos con <span class="font-bold">FlashTransfer</span>.</p>
+  <div class="flex flex-col justify-center items-center px-8 py-12 bg-gradient-to-br from-teal-700 to-teal-500 text-white relative overflow-hidden">
+    <!-- Animated background elements -->
+    <div class="absolute inset-0 overflow-hidden">
+      <div class="absolute -top-1/2 -left-1/2 w-full h-full bg-teal-400 rounded-full opacity-10 animate-pulse"></div>
+      <div class="absolute -bottom-1/2 -right-1/2 w-full h-full bg-teal-300 rounded-full opacity-10 animate-pulse" style="animation-delay: 1s"></div>
+    </div>
+    
+    <div class="max-w-md text-center md:text-left relative z-10">
+      <div class="flex items-center justify-center md:justify-start mb-6">
+        <div class="bg-white/20 p-4 rounded-2xl backdrop-blur-sm">
+          <div class="text-4xl">⚡</div>
+        </div>
+        <h1 class="text-4xl md:text-5xl font-black ml-4">FlashTransfer</h1>
+      </div>
+      <p class="text-lg md:text-xl font-medium mb-8">Tu dinero, tu control.<br>Transferencias en segundos con <span class="font-bold">FlashTransfer</span>.</p>
       <div class="flex justify-center md:justify-start">
-        <img src="../../../../../assets/img/ethIcon.png" alt="Ilustración" class="w-64 md:w-80 drop-shadow-2xl ml-[60px]">
+        <div class="relative">
+          <div class="absolute inset-0 bg-gradient-to-r from-cyan-400 to-blue-500 rounded-2xl blur-xl opacity-30 animate-pulse"></div>
+          <img src="../../../../../assets/img/ethIcon.png" alt="Ilustración" class="w-64 md:w-80 drop-shadow-2xl relative z-10">
+        </div>
       </div>
     </div>
   </div>
 
   <!-- LADO DERECHO: Login -->
   <div class="flex flex-col justify-center items-center px-8 py-12">
-    <div class="w-full max-w-md bg-white shadow-xl rounded-3xl p-8 border border-gray-200">
-      <h2 class="text-2xl font-extrabold text-teal-700 text-center mb-6">Inicia Sesión</h2>
+    <div class="w-full max-w-md bg-white/80 backdrop-blur-lg shadow-2xl rounded-3xl p-8 border border-gray-200/50">
+      <div class="text-center mb-8">
+        <h2 class="text-3xl font-extrabold text-teal-700 mb-2">¡Bienvenido de nuevo!</h2>
+        <p class="text-gray-600">Conecta tu wallet para continuar</p>
+      </div>
 
-      <div class="space-y-4">
+      <div class="space-y-5">
         <!-- MetaMask -->
-        <button class="w-full flex items-center justify-between bg-gray-50 border border-gray-200 rounded-xl p-3 hover:shadow-md transition" (click)="connectWithMetaMask()">
-          <div class="flex items-center gap-3">
-            <img src="../../../../../assets/img/metamask.png" class="w-8 h-8" alt="MetaMask">
-            <span class="font-semibold">MetaMask</span>
+        <button 
+          class="w-full flex items-center justify-between bg-gradient-to-r from-orange-50 to-amber-50 border border-amber-200 rounded-2xl p-4 hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1"
+          (click)="connectWithMetaMask()">
+          <div class="flex items-center gap-4">
+            <div class="bg-amber-100 p-3 rounded-xl">
+              <img src="../../../../../assets/img/metamask.png" class="w-8 h-8" alt="MetaMask">
+            </div>
+            <div class="text-left">
+              <span class="font-bold text-gray-800">MetaMask</span>
+              <p class="text-sm text-gray-600">La wallet más popular</p>
+            </div>
           </div>
-          <i class="fas fa-arrow-right text-gray-400"></i>
+          <div class="bg-amber-500 text-white p-2 rounded-lg">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M10.293 5.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L12.586 11H5a1 1 0 110-2h7.586l-2.293-2.293a1 1 0 010-1.414z" clip-rule="evenodd" />
+            </svg>
+          </div>
         </button>
 
-        <!-- Solana -->
-        <button class="w-full flex items-center justify-between bg-gray-50 border border-gray-200 rounded-xl p-3 hover:shadow-md transition">
-          <div class="flex items-center gap-3">
-            <img src="../../../../../assets/img/solana.png" class="w-8 h-8" alt="Solana">
-            <span class="font-semibold">Solana</span>
+        <!-- WalletConnect -->
+        <button 
+          class="w-full flex items-center justify-between bg-gradient-to-r from-blue-50 to-indigo-50 border border-indigo-200 rounded-2xl p-4 hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
+          <div class="flex items-center gap-4">
+            <div class="bg-indigo-100 p-3 rounded-xl">
+              <div class="w-8 h-8 flex items-center justify-center text-indigo-600 font-bold">🔗</div>
+            </div>
+            <div class="text-left">
+              <span class="font-bold text-gray-800">WalletConnect</span>
+              <p class="text-sm text-gray-600">Conecta con tu móvil</p>
+            </div>
           </div>
-          <i class="fas fa-arrow-right text-gray-400"></i>
+          <div class="bg-indigo-500 text-white p-2 rounded-lg">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M10.293 5.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L12.586 11H5a1 1 0 110-2h7.586l-2.293-2.293a1 1 0 010-1.414z" clip-rule="evenodd" />
+            </svg>
+          </div>
         </button>
 
-        <!-- Google -->
-        <button class="w-full flex items-center justify-between bg-gray-50 border border-gray-200 rounded-xl p-3 hover:shadow-md transition">
-          <div class="flex items-center gap-3">
-            <i class="fab fa-google text-red-500 text-xl"></i>
-            <span class="font-semibold">Google</span>
+        <!-- Coinbase Wallet -->
+        <button 
+          class="w-full flex items-center justify-between bg-gradient-to-r from-blue-50 to-cyan-50 border border-cyan-200 rounded-2xl p-4 hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
+          <div class="flex items-center gap-4">
+            <div class="bg-cyan-100 p-3 rounded-xl">
+              <div class="w-8 h-8 flex items-center justify-center text-cyan-600 font-bold">🔵</div>
+            </div>
+            <div class="text-left">
+              <span class="font-bold text-gray-800">Coinbase Wallet</span>
+              <p class="text-sm text-gray-600">Desde Coinbase</p>
+            </div>
           </div>
-          <i class="fas fa-arrow-right text-gray-400"></i>
+          <div class="bg-cyan-500 text-white p-2 rounded-lg">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M10.293 5.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L12.586 11H5a1 1 0 110-2h7.586l-2.293-2.293a1 1 0 010-1.414z" clip-rule="evenodd" />
+            </svg>
+          </div>
         </button>
+      </div>
 
-        <!-- Separador -->
-        <div class="flex items-center my-2">
-          <div class="flex-grow border-t border-gray-300"></div>
-          <span class="mx-3 text-gray-400 text-sm">o usa otra cuenta</span>
-          <div class="flex-grow border-t border-gray-300"></div>
-        </div>
+      <!-- Separador -->
+      <div class="flex items-center my-8">
+        <div class="flex-grow border-t border-gray-300"></div>
+        <span class="mx-4 text-gray-500 text-sm font-medium">O conéctate con</span>
+        <div class="flex-grow border-t border-gray-300"></div>
+      </div>
 
-        <!-- Discord + GitHub -->
-        <div class="flex gap-3">
-          <button class="flex-1 flex items-center justify-center gap-2 bg-gray-50 border border-gray-200 rounded-xl p-3 hover:shadow-md transition">
-            <i class="fab fa-discord text-indigo-600 text-xl"></i>
-            <span class="font-semibold">Discord</span>
-          </button>
-          <button class="flex-1 flex items-center justify-center gap-2 bg-gray-50 border border-gray-200 rounded-xl p-3 hover:shadow-md transition">
-            <i class="fab fa-github text-gray-800 text-xl"></i>
-            <span class="font-semibold">GitHub</span>
-          </button>
-        </div>
+      <!-- Otras opciones -->
+      <div class="grid grid-cols-3 gap-3">
+        <button class="flex items-center justify-center gap-2 bg-gray-50 border border-gray-200 rounded-xl p-3 hover:shadow-md transition">
+          <div class="w-6 h-6 flex items-center justify-center text-red-500">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12.48 10.92v3.28h7.84c-.24 1.84-.853 3.187-1.787 4.133-1.147 1.147-2.933 2.4-6.053 2.4-4.827 0-8.6-3.893-8.6-8.72s3.773-8.72 8.6-8.72c2.6 0 4.507 1.027 5.907 2.347l2.307-2.307C18.747 1.44 16.133 0 12.48 0 5.867 0 .307 5.387.307 12s5.56 12 12.173 12c3.573 0 6.267-1.173 8.373-3.36 2.16-2.16 2.84-5.213 2.84-7.667 0-.76-.053-1.467-.173-2.053H12.48z"/>
+            </svg>
+          </div>
+        </button>
+        <button class="flex items-center justify-center gap-2 bg-gray-50 border border-gray-200 rounded-xl p-3 hover:shadow-md transition">
+          <div class="w-6 h-6 flex items-center justify-center text-indigo-600">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M20.74 13.06c-.17 1.34-.72 2.5-1.56 3.34-.84.84-2 1.39-3.34 1.56-1.34.17-2.68.17-4.02 0-1.34-.17-2.5-.72-3.34-1.56-.84-.84-1.39-2-1.56-3.34-.17-1.34-.17-2.68 0-4.02.17-1.34.72-2.5 1.56-3.34.84-.84 2-1.39 3.34-1.56 1.34-.17 2.68-.17 4.02 0 1.34.17 2.5.72 3.34 1.56.84.84 1.39 2 1.56 3.34.17 1.34.17 2.68 0 4.02zm-8.74-9.06c-4.42 0-8 3.58-8 8s3.58 8 8 8 8-3.58 8-8-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+          </div>
+        </button>
+        <button class="flex items-center justify-center gap-2 bg-gray-50 border border-gray-200 rounded-xl p-3 hover:shadow-md transition">
+          <div class="w-6 h-6 flex items-center justify-center text-gray-800">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+            </svg>
+          </div>
+        </button>
       </div>
 
       <!-- Footer seguridad -->
-      <div class="mt-6 flex items-center gap-2 text-gray-500 text-sm justify-center">
-        <i class="fas fa-shield-alt text-teal-600"></i>
-        <span>Tus datos están protegidos con encriptación</span>
+      <div class="mt-8 flex items-center gap-3 text-gray-600 text-sm justify-center p-4 bg-teal-50 rounded-2xl">
+        <div class="bg-teal-100 p-2 rounded-lg">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-teal-600" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd" />
+          </svg>
+        </div>
+        <span>Tus datos están protegidos con encriptación de extremo a extremo</span>
       </div>
     </div>
   </div>

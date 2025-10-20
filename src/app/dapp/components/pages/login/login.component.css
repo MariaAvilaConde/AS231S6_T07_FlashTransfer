@@ -1,0 +1,99 @@
+/* Enhanced Login Page Styles */
+
+/* Background animation */
+@keyframes gradientShift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+/* Pulse animation for background elements */
+@keyframes pulseSlow {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.1;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 0.15;
+  }
+}
+
+/* Hover animation for wallet buttons */
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+/* Apply animations */
+.min-h-screen {
+  background-size: 200% 200%;
+  animation: gradientShift 10s ease infinite;
+}
+
+.animate-pulse {
+  animation: pulseSlow 4s ease-in-out infinite;
+}
+
+.transform.hover\:-translate-y-1:hover {
+  animation: float 2s ease-in-out infinite;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .grid.md\:grid-cols-2 {
+    grid-template-columns: 1fr;
+  }
+  
+  .bg-gradient-to-br.from-teal-700.to-teal-500 {
+    padding: 2rem 1rem;
+  }
+  
+  .max-w-md.text-center.md\:text-left {
+    text-align: center !important;
+  }
+  
+  .flex.justify-center.md\:justify-start {
+    justify-content: center !important;
+  }
+  
+  .w-64.md\:w-80 {
+    width: 12rem;
+  }
+}
+
+/* Glassmorphism effect */
+.backdrop-blur-lg {
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.bg-white\/80 {
+  background-color: rgba(255, 255, 255, 0.8);
+}
+
+/* Button hover effects */
+button:hover {
+  transition: all 0.3s ease;
+}
+
+/* Security badge */
+.bg-teal-50 {
+  background-color: rgba(204, 251, 241, 0.5);
+}
+
+/* Focus states for accessibility */
+button:focus {
+  outline: 2px solid #0066ff;
+  outline-offset: 2px;
+}

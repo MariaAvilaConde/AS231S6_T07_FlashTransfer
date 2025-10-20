@@ -9,13 +9,13 @@
       <div class="header-actions">
         <!-- Selector de Red -->
         <div class="network-selector">
-          <select (change)="switchNetwork($any($event.target).value)" [value]="chainId" class="network-select">
-            <option value="0xaa36a7">Sepolia</option>
-            <option value="0x4268">Holesky</option>
-            <option value="0x1">Ethereum</option>
-            <option value="0x5">Goerli</option>
-            <option value="0x89">Polygon</option>
-            <option value="0x13881">Mumbai</option>
+          <select (change)="onNetworkChange($event)" [value]="chainId" class="network-select">
+            <option value="0xaa36a7">Sepolia Testnet</option>
+            <option value="0x4268">Ethereum Holesky</option>
+            <option value="0x1">Ethereum Mainnet</option>
+            <option value="0x5">Goerli Testnet</option>
+            <option value="0x89">Polygon Mainnet</option>
+            <option value="0x13881">Mumbai Testnet</option>
           </select>
         </div>
         <button class="disconnect-btn" (click)="disconnect()">
@@ -76,44 +76,64 @@
       </div>
     </div>
 
-    <!-- Tokens List -->
-    <div class="tokens-section">
-      <h3 class="section-title">
-        <span class="title-icon">💰</span>
-        Tus Tokens
-      </h3>
-      <div class="tokens-list">
-        <div *ngFor="let token of tokenBalances" class="token-item">
-          <div class="token-icon">{{ token.icon }}</div>
-          <div class="token-info">
-            <p class="token-symbol">{{ token.symbol }}</p>
-            <p class="token-balance">{{ token.balance }}</p>
-          </div>
-          <div class="token-value">
-            <p class="token-usd">${{ token.usdValue }}</p>
+    <!-- Tokens and Transactions Grid -->
+    <div class="content-grid">
+      <!-- Tokens List -->
+      <div class="tokens-section">
+        <div class="section-header">
+          <h3 class="section-title">
+            <span class="title-icon">💰</span>
+            Tus Tokens
+          </h3>
+          <button class="add-token-btn" title="Agregar token">
+            +
+          </button>
+        </div>
+        <div class="tokens-list">
+          <div *ngFor="let token of tokenBalances" class="token-item">
+            <div class="token-icon">{{ token.icon }}</div>
+            <div class="token-info">
+              <p class="token-symbol">{{ token.symbol }}</p>
+              <p class="token-balance">{{ token.balance }}</p>
+            </div>
+            <div class="token-value">
+              <p class="token-usd">${{ token.usdValue }}</p>
+            </div>
           </div>
         </div>
       </div>
-    </div>
 
-    <!-- Recent Transactions -->
-    <div class="transactions-section">
-      <h3 class="section-title">
-        <span class="title-icon">📊</span>
-        Transacciones Recientes
-      </h3>
-      <div class="transactions-list">
-        <div *ngFor="let tx of recentTransactions" class="transaction-item">
-          <div class="tx-icon" [class.tx-send]="tx.type === 'send'" [class.tx-receive]="tx.type === 'receive'">
-            {{ tx.type === 'send' ? '↑' : '↓' }}
+      <!-- Recent Transactions -->
+      <div class="transactions-section">
+        <div class="section-header">
+          <h3 class="section-title">
+            <span class="title-icon">📊</span>
+            Transacciones Recientes
+          </h3>
+          <button class="view-all-btn" (click)="viewAllTransactions()" title="Ver todas">
+            Ver todas
+          </button>
+        </div>
+        <div class="transactions-list">
+          <div *ngFor="let tx of recentTransactions" class="transaction-item">
+            <div class="tx-icon" [class.tx-send]="tx.type === 'send'" [class.tx-receive]="tx.type === 'receive'">
+              {{ tx.type === 'send' ? '↑' : '↓' }}
+            </div>
+            <div class="tx-info">
+              <p class="tx-address">{{ formatAddress(tx.address) }}</p>
+              <p class="tx-time">{{ tx.time }}</p>
+            </div>
+            <div class="tx-amount" [class.tx-negative]="tx.type === 'send'" [class.tx-positive]="tx.type === 'receive'">
+              <p class="amount">{{ tx.amount }}</p>
+              <span class="tx-status">✓</span>
+            </div>
           </div>
-          <div class="tx-info">
-            <p class="tx-address">{{ tx.address }}</p>
-            <p class="tx-time">{{ tx.time }}</p>
-          </div>
-          <div class="tx-amount" [class.tx-negative]="tx.type === 'send'" [class.tx-positive]="tx.type === 'receive'">
-            <p class="amount">{{ tx.amount }}</p>
-            <span class="tx-status">✓</span>
+          
+          <!-- Empty state -->
+          <div *ngIf="recentTransactions.length === 0" class="empty-transactions">
+            <div class="empty-icon">📭</div>
+            <p class="empty-text">No hay transacciones recientes</p>
+            <button class="send-tokens-btn" (click)="sendTokens()">Enviar tokens</button>
           </div>
         </div>
       </div>
@@ -140,6 +160,13 @@
         <div class="stat-content">
           <p class="stat-label">Tokens</p>
           <p class="stat-value">{{ tokenBalances.length }}</p>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">🔒</div>
+        <div class="stat-content">
+          <p class="stat-label">Seguridad</p>
+          <p class="stat-value">Alta</p>
         </div>
       </div>
     </div>

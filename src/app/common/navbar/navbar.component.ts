@@ -1,13 +1,13 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnInit } from '@angular/core';
 import { WalletService } from '../../dapp/service/wallet.service';
-import { Router } from '@angular/router';
-import { RouterModule } from '@angular/router';
+import { Router, RouterModule } from '@angular/router';
+import { NetworkSwitcherComponent } from '../../dapp/components/network-switcher/network-switcher.component';
 
 @Component({
   selector: 'app-navbar',
   standalone: true,
-  imports: [CommonModule, RouterModule ],
+  imports: [CommonModule, RouterModule, NetworkSwitcherComponent],
   templateUrl: './navbar.component.html',
   styleUrl: './navbar.component.css'
 })
@@ -55,7 +55,7 @@ export class NavbarComponent implements OnInit {
     this.address = '';
     this.shortened = '';
     this.avatarUrl = '';
-    this.router.navigate(['/']);
+    this.router.navigate(['/login']);
   }
 
 }

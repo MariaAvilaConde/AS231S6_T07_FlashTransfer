@@ -255,15 +255,18 @@ export class MenuComponent implements OnInit {
   }
 
   disconnectWallet() {
-    this.walletAddress = ""
-    this.isConnected = false
-    console.log('Wallet desconectado')
+    this.walletAddress = "";
+    this.isConnected = false;
+    console.log('Wallet desconectado');
     
     // Remover event listeners si es necesario
     if (window.ethereum) {
-      window.ethereum.removeAllListeners('accountsChanged')
-      window.ethereum.removeAllListeners('chainChanged')
+      window.ethereum.removeAllListeners('accountsChanged');
+      window.ethereum.removeAllListeners('chainChanged');
     }
+    
+    // Navigate to home page
+    this.router.navigate(['/']);
   }
 
   goToDashboard() {

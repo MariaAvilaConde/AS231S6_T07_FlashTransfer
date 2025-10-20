@@ -17,7 +17,10 @@ export class LoginComponent {
   constructor(
     private walletService: WalletService,
     private router: Router
-  ) {}
+  ) {
+    // Clear any existing account data when login page loads
+    this.walletService.logout();
+  }
 
   async connectWithMetaMask() {
     try {

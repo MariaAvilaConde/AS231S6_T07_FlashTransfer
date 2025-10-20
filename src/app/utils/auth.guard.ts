@@ -51,13 +51,25 @@ export class AuthGuard implements CanActivate {
       // Si hay cuentas conectadas, permitir acceso
       if (accounts && accounts.length > 0) {
         console.log('Wallet verificado, acceso permitido');
-        return true;
+        // Also check if account is stored in localStorage
+        const storedAccount = localStorage.getItem('account');
+        if (storedAccount && accounts[0] === storedAccount) {
+          return true;
+        } else {
+          // Account mismatch, force logout
+          localStorage.removeItem('account');
+          return this.router.createUrlTree(['/login']);
+        }
       } else {
         console.warn('No hay cuentas conectadas');
+        // Clear stored account if no accounts connected
+        localStorage.removeItem('account');
         return this.router.createUrlTree(['/login']);
       }
     } catch (error) {
       console.error('Error verificando wallet:', error);
+      // Clear stored account on error
+      localStorage.removeItem('account');
       return this.router.createUrlTree(['/login']);
     }
   }
