@@ -20,7 +20,7 @@ RUN npm run build --prod
 FROM nginx:alpine
 
 # Copiar los archivos de la construcción al directorio de Nginx
-COPY --from=build /app/dist/<nombre-de-tu-app> /usr/share/nginx/html
+COPY --from=build /app/dist/nph-dashboard/browser /usr/share/nginx/html
 
 # Exponer el puerto 80
 EXPOSE 80
