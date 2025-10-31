@@ -1,7 +1,9 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { NetworkService, Network } from '../../service/network.service';
+import { Subject } from 'rxjs';
+import { takeUntil } from 'rxjs/operators';
 
 @Component({
   selector: 'app-network-switcher',
@@ -15,11 +17,15 @@ import { NetworkService, Network } from '../../service/network.service';
         [(ngModel)]="selectedNetwork" 
         (change)="onNetworkChange()" 
         class="network-select"
+        [disabled]="isSwitching"
       >
         <option *ngFor="let network of networks" [value]="network.chainId">
           {{ network.name }}
         </option>
       </select>
+      <div *ngIf="isSwitching" class="loading-indicator">
+        Cambiando red...
+      </div>
     </div>
   `,
   styles: [`
@@ -48,11 +54,25 @@ import { NetworkService, Network } from '../../service/network.service';
       border-color: #007bff;
       box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
     }
+    
+    .network-select:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    
+    .loading-indicator {
+      font-size: 12px;
+      color: #666;
+      margin-left: 8px;
+    }
   `]
 })
-export class NetworkSwitcherComponent implements OnInit {
+export class NetworkSwitcherComponent implements OnInit, OnDestroy {
   networks: Network[] = [];
   selectedNetwork: string = '';
+  isSwitching = false;
+  
+  private destroy$ = new Subject<void>();
   
   constructor(private networkService: NetworkService) {}
   
@@ -67,16 +87,55 @@ export class NetworkSwitcherComponent implements OnInit {
     }
     
     // Listen for network changes
-    this.networkService.currentNetwork$.subscribe(network => {
+    this.networkService.currentNetwork$.pipe(
+      takeUntil(this.destroy$)
+    ).subscribe(network => {
       if (network) {
         this.selectedNetwork = network.chainId;
+        this.isSwitching = false;
       }
     });
+    
+    // Listen for chain changes
+    this.networkService.chainChanged$.pipe(
+      takeUntil(this.destroy$)
+    ).subscribe(chainId => {
+      this.selectedNetwork = chainId;
+      this.isSwitching = false;
+    });
+    
+    // Setup network change listeners
+    this.networkService.listenToNetworkChanges();
+  }
+  
+  ngOnDestroy() {
+    this.destroy$.next();
+    this.destroy$.complete();
+    this.networkService.removeNetworkListener();
   }
   
   async onNetworkChange() {
     if (this.selectedNetwork) {
-      await this.networkService.switchNetwork(this.selectedNetwork);
+      this.isSwitching = true;
+      try {
+        const success = await this.networkService.switchNetwork(this.selectedNetwork);
+        if (!success) {
+          // Revert to previous selection on error
+          const currentNetwork = this.networkService.getCurrentNetwork();
+          if (currentNetwork) {
+            this.selectedNetwork = currentNetwork.chainId;
+          }
+        }
+      } catch (error) {
+        console.error('Error switching network:', error);
+        // Revert to previous selection on error
+        const currentNetwork = this.networkService.getCurrentNetwork();
+        if (currentNetwork) {
+          this.selectedNetwork = currentNetwork.chainId;
+        }
+      } finally {
+        this.isSwitching = false;
+      }
     }
   }
 }

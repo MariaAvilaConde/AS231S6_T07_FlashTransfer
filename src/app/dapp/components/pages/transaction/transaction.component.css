@@ -735,7 +735,7 @@
   gap: 0.5rem;
   flex-wrap: wrap;
   font-size: 0.85rem;
-  margin-bottom: 1rem;
+  margin-bottom: 0.5rem;
 }
 
 .tx-hash-label {
@@ -752,6 +752,37 @@
 .tx-hash-value:hover {
   color: #a78bfa;
   text-decoration: underline;
+}
+
+.tx-explorer {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  font-size: 0.85rem;
+  margin-bottom: 1rem;
+}
+
+.tx-explorer-label {
+  color: #94a3b8;
+}
+
+.tx-explorer-link {
+  color: #3b82f6;
+  text-decoration: none;
+  font-weight: 600;
+  padding: 0.25rem 0.75rem;
+  background: rgba(59, 130, 246, 0.1);
+  border-radius: 8px;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  transition: all 0.3s ease;
+}
+
+.tx-explorer-link:hover {
+  background: rgba(59, 130, 246, 0.2);
+  color: #60a5fa;
+  text-decoration: underline;
+  transform: translateY(-1px);
 }
 
 .tx-actions {

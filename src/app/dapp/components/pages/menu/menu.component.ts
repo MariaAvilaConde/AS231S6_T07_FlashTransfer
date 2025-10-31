@@ -1,6 +1,8 @@
-import { Component, type OnInit } from "@angular/core"
-import { CommonModule } from "@angular/common"
+import { Component, type OnInit, OnDestroy, Inject, PLATFORM_ID } from "@angular/core"
+import { CommonModule, isPlatformBrowser } from "@angular/common"
 import { Router } from "@angular/router"
+import { Subject } from "rxjs"
+import { takeUntil } from "rxjs/operators"
 
 // Declarar la interfaz de Ethereum para TypeScript
 declare global {
@@ -30,11 +32,13 @@ interface WalletOption {
   templateUrl: "./menu.component.html",
   styleUrl: "./menu.component.css",
 })
-export class MenuComponent implements OnInit {
+export class MenuComponent implements OnInit, OnDestroy {
   walletAddress = ""
   isConnected = false
   isConnecting = false
   showWalletModal = false
+  errorMessage = ""
+  private isBrowser: boolean;
 
   walletOptions: WalletOption[] = [
     {
@@ -94,15 +98,34 @@ export class MenuComponent implements OnInit {
     },
   ]
 
-  constructor(private router: Router) { }
+  private destroy$ = new Subject<void>();
+
+  constructor(
+    private router: Router,
+    @Inject(PLATFORM_ID) private platformId: Object
+  ) { 
+    this.isBrowser = isPlatformBrowser(platformId);
+  }
 
   ngOnInit() {
     this.checkWalletConnection()
+    this.setupEventListeners()
+  }
+
+  ngOnDestroy() {
+    this.destroy$.next();
+    this.destroy$.complete();
+    
+    // Remove event listeners only in browser environment
+    if (this.isBrowser && window.ethereum) {
+      window.ethereum.removeAllListeners('accountsChanged');
+      window.ethereum.removeAllListeners('chainChanged');
+    }
   }
 
   async checkWalletConnection() {
     // Verificar si estamos en el cliente (navegador)
-    if (typeof window === 'undefined') {
+    if (!this.isBrowser) {
       return;
     }
 
@@ -124,12 +147,49 @@ export class MenuComponent implements OnInit {
     }
   }
 
+  setupEventListeners() {
+    // Only set up event listeners in browser environment
+    if (!this.isBrowser) {
+      return;
+    }
+    
+    if (window.ethereum) {
+      // Remove existing listeners to prevent duplicates
+      window.ethereum.removeAllListeners('accountsChanged');
+      window.ethereum.removeAllListeners('chainChanged');
+      
+      // Escuchar cambios de cuenta
+      window.ethereum.on('accountsChanged', (accounts: string[]) => {
+        if (accounts.length === 0) {
+          // Usuario desconectó todas las cuentas
+          this.disconnectWallet()
+        } else {
+          // Usuario cambió de cuenta
+          this.walletAddress = accounts[0]
+          this.isConnected = true
+          console.log('Cuenta cambiada:', this.formatAddress(this.walletAddress))
+        }
+      })
+
+      // Escuchar cambios de red
+      window.ethereum.on('chainChanged', (chainId: string) => {
+        console.log('Red cambiada:', chainId)
+        // Recargar la página cuando cambie la red
+        if (this.isBrowser) {
+          window.location.reload()
+        }
+      })
+    }
+  }
+
   openWalletModal() {
     this.showWalletModal = true
+    this.errorMessage = "" // Clear any previous errors
   }
 
   closeWalletModal() {
     this.showWalletModal = false
+    this.errorMessage = "" // Clear any errors
   }
 
   async selectWallet(walletId: string) {
@@ -142,24 +202,25 @@ export class MenuComponent implements OnInit {
     } else if (walletId === 'coinbase') {
       await this.connectCoinbase()
     } else {
-      alert(`${walletId} estará disponible próximamente`)
+      this.errorMessage = `${walletId} estará disponible próximamente`
     }
   }
 
   private async connectMetaMask() {
     // Verificar si estamos en el cliente
-    if (typeof window === 'undefined') {
-      alert('Error: No se puede conectar en este entorno')
+    if (!this.isBrowser) {
+      this.errorMessage = 'Error: No se puede conectar en este entorno'
       return;
     }
 
     if (!window.ethereum) {
-      alert("MetaMask no está instalado. Por favor instálalo para continuar.")
+      this.errorMessage = "MetaMask no está instalado. Por favor instálalo para continuar."
       window.open("https://metamask.io/download/", "_blank")
       return;
     }
 
     this.isConnecting = true
+    this.errorMessage = ""
     try {
       console.log('Solicitando conexión con MetaMask...')
       
@@ -175,13 +236,11 @@ export class MenuComponent implements OnInit {
         
         console.log('Wallet conectado exitosamente:', this.formatAddress(this.walletAddress))
         
-        // Escuchar cambios de cuenta
-        this.setupEventListeners()
-        
         // Redirigir al dashboard después de conectar
         setTimeout(() => {
           this.router.navigate(['/dashboard']).catch(err => {
             console.error('Error navegando al dashboard:', err)
+            this.errorMessage = 'Error al navegar al dashboard'
           })
         }, 1000)
         
@@ -191,51 +250,28 @@ export class MenuComponent implements OnInit {
 
     } catch (error: any) {
       console.error("Error conectando wallet:", error)
+      this.errorMessage = error.message || "Error desconocido al conectar con MetaMask"
       
       // Manejar errores específicos
       if (error.code === 4001) {
-        alert("Conexión rechazada por el usuario")
+        this.errorMessage = "Conexión rechazada por el usuario"
       } else if (error.code === -32002) {
-        alert("Ya hay una solicitud de conexión pendiente. Por favor revisa tu MetaMask.")
-      } else {
-        alert("Error al conectar con MetaMask: " + error.message)
+        this.errorMessage = "Ya hay una solicitud de conexión pendiente. Por favor revisa tu MetaMask."
       }
     } finally {
       this.isConnecting = false
     }
   }
 
-  private setupEventListeners() {
-    if (window.ethereum) {
-      // Escuchar cambios de cuenta
-      window.ethereum.on('accountsChanged', (accounts: string[]) => {
-        if (accounts.length === 0) {
-          // Usuario desconectó todas las cuentas
-          this.disconnectWallet()
-        } else {
-          // Usuario cambió de cuenta
-          this.walletAddress = accounts[0]
-          console.log('Cuenta cambiada:', this.formatAddress(this.walletAddress))
-        }
-      })
-
-      // Escuchar cambios de red
-      window.ethereum.on('chainChanged', (chainId: string) => {
-        console.log('Red cambiada:', chainId)
-        // Recargar la página cuando cambie la red
-        window.location.reload()
-      })
-    }
-  }
-
   private async connectWalletConnect() {
     this.isConnecting = true
+    this.errorMessage = ""
     try {
-      alert("WalletConnect: Esta funcionalidad estará disponible próximamente")
+      this.errorMessage = "WalletConnect: Esta funcionalidad estará disponible próximamente"
       this.showWalletModal = false
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error conectando con WalletConnect:", error)
-      alert("Error al conectar con WalletConnect")
+      this.errorMessage = "Error al conectar con WalletConnect: " + (error.message || "Error desconocido")
     } finally {
       this.isConnecting = false
     }
@@ -243,12 +279,13 @@ export class MenuComponent implements OnInit {
 
   private async connectCoinbase() {
     this.isConnecting = true
+    this.errorMessage = ""
     try {
-      alert("Coinbase Wallet: Esta funcionalidad estará disponible próximamente")
+      this.errorMessage = "Coinbase Wallet: Esta funcionalidad estará disponible próximamente"
       this.showWalletModal = false
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error conectando con Coinbase:", error)
-      alert("Error al conectar con Coinbase Wallet")
+      this.errorMessage = "Error al conectar con Coinbase Wallet: " + (error.message || "Error desconocido")
     } finally {
       this.isConnecting = false
     }
@@ -260,7 +297,7 @@ export class MenuComponent implements OnInit {
     console.log('Wallet desconectado');
     
     // Remover event listeners si es necesario
-    if (window.ethereum) {
+    if (this.isBrowser && window.ethereum) {
       window.ethereum.removeAllListeners('accountsChanged');
       window.ethereum.removeAllListeners('chainChanged');
     }
@@ -273,6 +310,7 @@ export class MenuComponent implements OnInit {
     if (this.isConnected) {
       this.router.navigate(['/dashboard']).catch(err => {
         console.error('Error navegando al dashboard:', err)
+        this.errorMessage = 'Error al navegar al dashboard'
       })
     } else {
       this.openWalletModal()

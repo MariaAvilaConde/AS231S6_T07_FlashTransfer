@@ -1,5 +1,6 @@
-import { Injectable } from '@angular/core';
-import { BehaviorSubject, Observable } from 'rxjs';
+import { Injectable, Inject, PLATFORM_ID } from '@angular/core';
+import { isPlatformBrowser } from '@angular/common';
+import { BehaviorSubject, Observable, Subject } from 'rxjs';
 
 export interface Network {
   chainId: string;
@@ -46,14 +47,30 @@ export class NetworkService {
   private currentNetworkSubject = new BehaviorSubject<Network | null>(null);
   public currentNetwork$ = this.currentNetworkSubject.asObservable();
 
-  constructor() {
+  // Subject for handling chain changes globally
+  private chainChangedSubject = new Subject<string>();
+  public chainChanged$ = this.chainChangedSubject.asObservable();
+  private isBrowser: boolean;
+  
+  // Store the chainChanged handler to properly remove it later
+  private chainChangedHandler: ((chainId: string) => void) | null = null;
+
+  constructor(@Inject(PLATFORM_ID) private platformId: Object) {
+    this.isBrowser = isPlatformBrowser(platformId);
     // Inicializar con la red por defecto si es necesario
     this.initializeNetwork();
   }
 
   // Inicializar la red desde localStorage o con una red por defecto
   private initializeNetwork() {
-    if (typeof window !== 'undefined' && (window as any).ethereum) {
+    // Only run in browser environment
+    if (!this.isBrowser) {
+      // Fallback to default network if not in browser
+      this.setCurrentNetwork(this.networks['0x1']);
+      return;
+    }
+    
+    if ((window as any).ethereum) {
       (window as any).ethereum.request({ method: 'eth_chainId' })
         .then((chainId: string) => {
           const network = this.networks[chainId] || this.networks['0x1']; // Default to Mainnet
@@ -96,7 +113,12 @@ export class NetworkService {
 
   // Cambiar la red usando MetaMask
   async switchNetwork(chainId: string): Promise<boolean> {
-    if (typeof window !== 'undefined' && (window as any).ethereum) {
+    // Only run in browser environment
+    if (!this.isBrowser) {
+      return false;
+    }
+    
+    if ((window as any).ethereum) {
       try {
         // Primero intentar cambiar a la red
         await (window as any).ethereum.request({
@@ -108,6 +130,8 @@ export class NetworkService {
         const network = this.networks[chainId];
         if (network) {
           this.setCurrentNetwork(network);
+          // Emit chain change event
+          this.chainChangedSubject.next(chainId);
         }
         
         return true;
@@ -115,8 +139,9 @@ export class NetworkService {
         // Este error code indica que la cadena no ha sido añadida a MetaMask
         if (switchError.code === 4902) {
           try {
-            // Podríamos intentar añadir la red aquí si es necesario
-            console.error('Chain not added to MetaMask');
+            // Intentar añadir la red si no está disponible
+            await this.addNetworkToMetaMask(chainId);
+            return true;
           } catch (addError) {
             console.error('Error adding chain to MetaMask:', addError);
           }
@@ -128,20 +153,63 @@ export class NetworkService {
     return false;
   }
 
+  // Método para añadir una red a MetaMask
+  private async addNetworkToMetaMask(chainId: string): Promise<void> {
+    const network = this.networks[chainId];
+    if (!network) {
+      throw new Error('Network not supported');
+    }
+
+    await (window as any).ethereum.request({
+      method: 'wallet_addEthereumChain',
+      params: [{
+        chainId: network.chainId,
+        chainName: network.name,
+        rpcUrls: [network.apiUrl.replace('/api', '')], // Remove /api from URL for RPC
+        blockExplorerUrls: [network.explorer],
+        nativeCurrency: {
+          name: network.name,
+          symbol: network.symbol,
+          decimals: network.decimals,
+        },
+      }],
+    });
+  }
+
   // Escuchar cambios de red en MetaMask
   listenToNetworkChanges() {
-    if (typeof window !== 'undefined' && (window as any).ethereum) {
-      (window as any).ethereum.on('chainChanged', (chainId: string) => {
+    // Only run in browser environment
+    if (!this.isBrowser) {
+      return;
+    }
+    
+    if ((window as any).ethereum) {
+      // Remove existing listeners to prevent duplicates
+      this.removeNetworkListener();
+      
+      // Create and store the handler function
+      this.chainChangedHandler = (chainId: string) => {
         const network = this.networks[chainId] || this.networks['0x1']; // Default to Mainnet
         this.setCurrentNetwork(network);
-      });
+        // Emit chain change event
+        this.chainChangedSubject.next(chainId);
+      };
+      
+      // Add new listener
+      (window as any).ethereum.on('chainChanged', this.chainChangedHandler);
     }
   }
 
   // Dejar de escuchar cambios de red
   removeNetworkListener() {
-    if (typeof window !== 'undefined' && (window as any).ethereum) {
-      (window as any).ethereum.removeListener('chainChanged', () => {});
+    // Only run in browser environment
+    if (!this.isBrowser) {
+      return;
+    }
+    
+    if ((window as any).ethereum && this.chainChangedHandler) {
+      (window as any).ethereum.removeListener('chainChanged', this.chainChangedHandler);
+      this.chainChangedHandler = null;
     }
   }
 }

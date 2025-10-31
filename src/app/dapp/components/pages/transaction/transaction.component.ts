@@ -1,9 +1,9 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, OnInit, OnDestroy, Inject, PLATFORM_ID } from '@angular/core';
+import { CommonModule, isPlatformBrowser } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { catchError, of, Subscription } from 'rxjs';
+import { catchError, of, Subscription, Subject, debounceTime, distinctUntilChanged, switchMap, takeUntil } from 'rxjs';
 import { WalletService } from '../../../service/wallet.service';
 import { EtherscanService, EtherscanTransaction } from '../../../service/etherscan.service';
 import { NetworkService, Network as NetworkModel } from '../../../service/network.service';
@@ -22,17 +22,6 @@ interface Transaction {
   explorerUrl?: string;
 }
 
-// Remove the local Network interface since we're using the one from NetworkService
-// interface Network {
-//   chainId: string;
-//   name: string;
-//   symbol: string;
-//   decimals: number;
-//   explorer: string;
-//   apiUrl: string;
-//   apiKey?: string;
-// }
-
 @Component({
   selector: 'app-transaction',
   standalone: true,
@@ -46,6 +35,7 @@ export class TransactionComponent implements OnInit, OnDestroy {
   currentNetwork: NetworkModel | null = null;
   balance = '0';
   gasEstimate = '0.0001'; // Default gas estimate
+  private isBrowser: boolean;
   
   // Form data
   recipientAddress = '';
@@ -62,21 +52,33 @@ export class TransactionComponent implements OnInit, OnDestroy {
   toastMessage = '';
   toastType: 'success' | 'error' | 'info' = 'info';
   
-  // Remove local networks definition since we're using NetworkService
+  // Subjects for better event handling
+  private refreshSubject = new Subject<void>();
+  private destroy$ = new Subject<void>();
+  private networkSubscription: Subscription = new Subscription();
 
   constructor(
     private router: Router, 
     private http: HttpClient, 
     private walletService: WalletService,
     private etherscanService: EtherscanService,
-    private networkService: NetworkService
-  ) {}
-
-  private networkSubscription: Subscription = new Subscription();
+    private networkService: NetworkService,
+    @Inject(PLATFORM_ID) private platformId: Object
+  ) {
+    this.isBrowser = isPlatformBrowser(platformId);
+  }
 
   ngOnInit() {
     this.initWallet();
     this.setupEventListeners();
+    
+    // Setup debounced refresh
+    this.refreshSubject.pipe(
+      debounceTime(300),
+      takeUntil(this.destroy$)
+    ).subscribe(() => {
+      this.loadLocalTransactions();
+    });
     
     // Subscribe to network changes
     this.networkSubscription = this.networkService.currentNetwork$.subscribe(
@@ -84,26 +86,34 @@ export class TransactionComponent implements OnInit, OnDestroy {
         if (network) {
           this.currentNetwork = network;
           this.loadBalance();
-          this.loadLocalTransactions();
+          this.refreshSubject.next();
         }
       }
     );
   }
 
   ngOnDestroy() {
-    // Clean up subscription
+    // Clean up subscriptions
+    this.destroy$.next();
+    this.destroy$.complete();
+    
     if (this.networkSubscription) {
       this.networkSubscription.unsubscribe();
     }
     
-    // Remove event listeners
-    if (typeof window !== 'undefined' && (window as any).ethereum) {
+    // Remove event listeners only in browser environment
+    if (this.isBrowser && (window as any).ethereum) {
       (window as any).ethereum.removeAllListeners();
     }
   }
 
   private async initWallet() {
-    if (typeof window !== 'undefined' && (window as any).ethereum) {
+    // Only run in browser environment
+    if (!this.isBrowser) {
+      return;
+    }
+    
+    if ((window as any).ethereum) {
       try {
         const accounts = await (window as any).ethereum.request({
           method: 'eth_accounts'
@@ -114,7 +124,7 @@ export class TransactionComponent implements OnInit, OnDestroy {
           this.isConnected = true;
           await this.loadNetworkInfo();
           await this.loadBalance();
-          this.loadLocalTransactions();
+          this.refreshSubject.next();
         } else {
           this.router.navigate(['/']);
         }
@@ -130,29 +140,33 @@ export class TransactionComponent implements OnInit, OnDestroy {
   }
 
   setupEventListeners() {
-    if (typeof window !== 'undefined' && (window as any).ethereum) {
+    // Only set up event listeners in browser environment
+    if (!this.isBrowser) {
+      return;
+    }
+    
+    if ((window as any).ethereum) {
       (window as any).ethereum.on('accountsChanged', async (accounts: string[]) => {
         if (accounts.length > 0) {
           this.walletAddress = accounts[0];
           await this.loadBalance();
-          this.loadLocalTransactions();
+          this.refreshSubject.next();
           this.showNotification('Cuenta cambiada exitosamente', 'info');
         } else {
           this.router.navigate(['/']);
         }
       });
 
-      // Remove the chainChanged listener here since we're handling it globally
-      // (window as any).ethereum.on('chainChanged', async (chainId: string) => {
-      //   this.currentNetwork = this.networks[chainId] || null;
-      //   await this.loadBalance();
-      //   this.loadLocalTransactions();
-      //   this.showNotification(`Red cambiada a: ${this.currentNetwork?.name}`, 'info');
-      // });
+      // Chain changed listener is handled globally by NetworkService
     }
   }
 
   private async loadNetworkInfo() {
+    // Only run in browser environment
+    if (!this.isBrowser) {
+      return;
+    }
+    
     try {
       // Get current network from the network service instead
       const currentNetwork = this.networkService.getCurrentNetwork();
@@ -179,6 +193,11 @@ export class TransactionComponent implements OnInit, OnDestroy {
   }
 
   private async loadBalance() {
+    // Only run in browser environment
+    if (!this.isBrowser) {
+      return;
+    }
+    
     try {
       if (this.currentNetwork && this.walletAddress) {
         const balance = await this.walletService.getBalance(this.walletAddress, this.currentNetwork.chainId);
@@ -244,17 +263,22 @@ export class TransactionComponent implements OnInit, OnDestroy {
         
         this.etherscanService.getAllTransactions(this.walletAddress, networkName).subscribe(
           (etherscanTxs: EtherscanTransaction[]) => {
-            const mappedTxs: Transaction[] = etherscanTxs.map(tx => ({
-              hash: tx.hash,
-              from: tx.from,
-              to: tx.to,
-              value: tx.amount,
-              timestamp: new Date(tx.timestamp),
-              status: tx.isError ? 'failed' : 'success',
-              network: tx.network,
-              chainId: this.currentNetwork?.chainId || '0x1',
-              explorerUrl: this.etherscanService.getExplorerUrl(tx.network, tx.hash)
-            }));
+            const mappedTxs: Transaction[] = etherscanTxs.map(tx => {
+              // Get explorer URL from the etherscan service
+              const explorerUrl = this.etherscanService.getExplorerUrl(tx.network, tx.hash);
+              
+              return {
+                hash: tx.hash,
+                from: tx.from,
+                to: tx.to,
+                value: tx.amount,
+                timestamp: new Date(tx.timestamp),
+                status: tx.isError ? 'failed' : 'success',
+                network: tx.network,
+                chainId: this.currentNetwork?.chainId || '0x1',
+                explorerUrl: explorerUrl
+              };
+            });
             
             // Merge with existing local transactions
             const mergedTxs = [...mappedTxs, ...localTxs];
@@ -306,6 +330,14 @@ export class TransactionComponent implements OnInit, OnDestroy {
   }
 
   saveTransaction(tx: Transaction) {
+    // Ensure explorer URL is set for the transaction
+    if (!tx.explorerUrl && tx.chainId && tx.hash) {
+      const network = this.networkService.getNetworkByChainId(tx.chainId);
+      if (network?.explorer) {
+        tx.explorerUrl = `${network.explorer}/tx/${tx.hash}`;
+      }
+    }
+    
     const existingIndex = this.transactions.findIndex(t => t.hash === tx.hash);
     
     if (existingIndex !== -1) {
@@ -345,6 +377,11 @@ export class TransactionComponent implements OnInit, OnDestroy {
   }
 
   async sendTransaction() {
+    // Only run in browser environment
+    if (!this.isBrowser) {
+      return;
+    }
+    
     if (!this.recipientAddress || !this.amount) {
       this.showNotification('Por favor completa todos los campos', 'error');
       return;
@@ -436,6 +473,11 @@ export class TransactionComponent implements OnInit, OnDestroy {
   }
 
   private async checkTransactionStatus(txHash: string) {
+    // Only run in browser environment
+    if (!this.isBrowser) {
+      return;
+    }
+    
     let attempts = 0;
     const maxAttempts = 40;
 
@@ -497,6 +539,11 @@ export class TransactionComponent implements OnInit, OnDestroy {
   }
 
   copyToClipboard(text: string, label: string = 'Hash') {
+    // Only run in browser environment
+    if (!this.isBrowser) {
+      return;
+    }
+    
     navigator.clipboard.writeText(text).then(() => {
       this.showNotification(`${label} copiado al portapapeles`, 'success');
     }).catch(err => {
@@ -506,6 +553,11 @@ export class TransactionComponent implements OnInit, OnDestroy {
   }
 
   viewOnExplorer(txHash: string, chainId?: string) {
+    // Only run in browser environment
+    if (!this.isBrowser) {
+      return;
+    }
+    
     const targetChainId = chainId || this.currentNetwork?.chainId;
     const network = this.networkService.getNetworkByChainId(targetChainId || '') || this.networkService.getCurrentNetwork();
     
@@ -518,8 +570,13 @@ export class TransactionComponent implements OnInit, OnDestroy {
   }
 
   viewTransactionDetails(tx: Transaction) {
+    // Only run in browser environment
+    if (!this.isBrowser) {
+      return;
+    }
+    
     const network = this.networkService.getNetworkByChainId(tx.chainId) || this.networkService.getCurrentNetwork();
-    const explorerUrl = network?.explorer ? `${network.explorer}/tx/${tx.hash}` : 'No disponible';
+    const explorerUrl = this.getExplorerUrl(tx) || 'No disponible';
     
     const details = `
 Detalles de la Transacción:
@@ -536,7 +593,11 @@ ${tx.gasUsed ? `Gas Usado: ${parseInt(tx.gasUsed, 16)}` : ''}
 Explorer: ${explorerUrl}
     `;
     
-    alert(details);
+    // Create a more user-friendly modal with a link to the explorer
+    const shouldOpenExplorer = confirm(`${details}\n\n¿Quieres abrir esta transacción en el explorador de bloques?`);
+    if (shouldOpenExplorer && explorerUrl !== 'No disponible') {
+      window.open(explorerUrl, '_blank');
+    }
   }
 
   showNotification(message: string, type: 'success' | 'error' | 'info') {
@@ -555,8 +616,8 @@ Explorer: ${explorerUrl}
 
   disconnectWallet() {
     console.log('Disconnecting wallet from transaction page...');
-    // Remove event listeners
-    if (typeof window !== 'undefined' && (window as any).ethereum) {
+    // Remove event listeners only in browser environment
+    if (this.isBrowser && (window as any).ethereum) {
       (window as any).ethereum.removeAllListeners();
     }
     
@@ -601,15 +662,20 @@ Explorer: ${explorerUrl}
     // Clear current transactions to show loading state
     this.transactions = [];
     // Force reload from both localStorage and API
-    await this.loadLocalTransactions();
+    this.refreshSubject.next();
   }
 
   toggleAllNetworks() {
     this.showAllNetworks = !this.showAllNetworks;
-    this.loadLocalTransactions();
+    this.refreshSubject.next();
   }
 
   clearTransactionHistory() {
+    // Only run in browser environment
+    if (!this.isBrowser) {
+      return;
+    }
+    
     if (confirm('¿Estás seguro de que deseas borrar el historial local?')) {
       localStorage.removeItem(`transactions_${this.walletAddress}`);
       this.transactions = [];
@@ -644,9 +710,34 @@ Explorer: ${explorerUrl}
     return '🌐';
   }
 
+  /**
+   * Get explorer URL for a transaction
+   * @param tx - The transaction object
+   * @returns The explorer URL or undefined if not available
+   */
+  getExplorerUrl(tx: Transaction): string | undefined {
+    // If explorerUrl is already set in the transaction, use it
+    if (tx.explorerUrl) {
+      return tx.explorerUrl;
+    }
+    
+    // Otherwise, try to construct it from the network service
+    const network = this.networkService.getNetworkByChainId(tx.chainId);
+    if (network?.explorer) {
+      return `${network.explorer}/tx/${tx.hash}`;
+    }
+    
+    // Fallback to etherscan service method
+    if (tx.network) {
+      return this.etherscanService.getExplorerUrl(tx.network, tx.hash);
+    }
+    
+    return undefined;
+  }
+
   filterTransactionsByNetwork(networkName: string) {
     if (!networkName) {
-      this.loadLocalTransactions();
+      this.refreshSubject.next();
       return;
     }
     

@@ -1,9 +1,10 @@
-import { Component, type OnInit, OnDestroy } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, type OnInit, OnDestroy, Inject, PLATFORM_ID } from '@angular/core';
+import { CommonModule, isPlatformBrowser } from '@angular/common';
 import { Router } from '@angular/router';
 import { ethers } from 'ethers';
 import { WalletService } from '../../../service/wallet.service';
 import { NetworkService, Network as NetworkModel } from '../../../service/network.service';
+import { debounceTime, distinctUntilChanged, Subject, takeUntil } from 'rxjs';
 
 interface TokenBalance {
   symbol: string;
@@ -36,6 +37,7 @@ export class WalletComponent implements OnInit, OnDestroy {
   isLoading = true;
   networkName = '';
   chainId = '';
+  private isBrowser: boolean;
 
   // Configuración de redes soportadas
   supportedNetworks: { [key: string]: NetworkConfig } = {
@@ -117,21 +119,45 @@ export class WalletComponent implements OnInit, OnDestroy {
   recentTransactions: any[] = [];
 
   private ethereum: any;
+  private destroy$ = new Subject<void>();
+  private refreshSubject = new Subject<void>();
 
-  constructor(private router: Router, private walletService: WalletService, private networkService: NetworkService) {
-    this.ethereum = (window as any).ethereum;
+  constructor(
+    private router: Router, 
+    private walletService: WalletService, 
+    private networkService: NetworkService,
+    @Inject(PLATFORM_ID) private platformId: Object
+  ) {
+    this.isBrowser = isPlatformBrowser(platformId);
+    // Only access window in browser environment
+    this.ethereum = this.isBrowser ? (window as any).ethereum : undefined;
   }
 
   async ngOnInit() {
+    // Setup debounced refresh
+    this.refreshSubject.pipe(
+      debounceTime(300),
+      takeUntil(this.destroy$)
+    ).subscribe(() => {
+      this.loadWalletData();
+    });
+
     await this.loadWalletData();
     this.setupEventListeners();
   }
 
   ngOnDestroy() {
+    this.destroy$.next();
+    this.destroy$.complete();
     this.removeEventListeners();
   }
 
   private setupEventListeners() {
+    // Only set up event listeners in browser environment
+    if (!this.isBrowser) {
+      return;
+    }
+    
     if (this.ethereum) {
       // Remove existing listeners first to prevent duplicates
       this.removeEventListeners();
@@ -143,7 +169,7 @@ export class WalletComponent implements OnInit, OnDestroy {
           this.handleWalletDisconnect();
         } else {
           this.walletAddress = accounts[0];
-          this.loadWalletData();
+          this.refreshSubject.next();
         }
       });
 
@@ -167,7 +193,7 @@ export class WalletComponent implements OnInit, OnDestroy {
       // Escuchar cuando se conecta la wallet
       this.ethereum.on('connect', (connectInfo: any) => {
         console.log('Wallet connected:', connectInfo);
-        this.loadWalletData();
+        this.refreshSubject.next();
       });
 
       // Escuchar cuando se desconecta la wallet
@@ -187,6 +213,11 @@ export class WalletComponent implements OnInit, OnDestroy {
   }
 
   private removeEventListeners() {
+    // Only remove event listeners in browser environment
+    if (!this.isBrowser) {
+      return;
+    }
+    
     if (this.ethereum) {
       this.ethereum.removeAllListeners('accountsChanged');
       this.ethereum.removeAllListeners('chainChanged');
@@ -196,6 +227,11 @@ export class WalletComponent implements OnInit, OnDestroy {
   }
 
   private async loadWalletData() {
+    // Only run in browser environment
+    if (!this.isBrowser) {
+      return;
+    }
+    
     this.isLoading = true;
     
     if (this.ethereum) {
@@ -239,12 +275,13 @@ export class WalletComponent implements OnInit, OnDestroy {
 
       } catch (error: any) {
         console.error('Error loading wallet data:', error);
-        alert('Error al cargar datos de la wallet');
+        // Show user-friendly error message
+        this.showNotification('Error al cargar datos de la wallet: ' + (error.message || 'Error desconocido'), 'error');
       } finally {
         this.isLoading = false;
       }
     } else {
-      alert('MetaMask no detectado');
+      this.showNotification('MetaMask no detectado', 'error');
       this.router.navigate(['/']);
     }
   }
@@ -259,9 +296,15 @@ export class WalletComponent implements OnInit, OnDestroy {
   }
 
   private async loadBalances(chainId: string) {
+    // Only run in browser environment
+    if (!this.isBrowser) {
+      return;
+    }
+    
     const networkConfig = this.supportedNetworks[chainId];
     if (!networkConfig) {
       console.error('Red no soportada:', chainId);
+      this.showNotification('Red no soportada: ' + chainId, 'error');
       return;
     }
 
@@ -289,36 +332,56 @@ export class WalletComponent implements OnInit, OnDestroy {
 
     } catch (error: any) {
       console.error('Error loading balances:', error);
+      this.showNotification('Error al cargar saldos: ' + (error.message || 'Error desconocido'), 'error');
     }
   }
 
   private async loadERC20Balances(provider: ethers.JsonRpcProvider) {
-    for (const token of this.tokenBalances) {
-      if (token.contractAddress) {
-        try {
-          // ABI mínima para balanceOf
-          const abi = ['function balanceOf(address) view returns (uint256)'];
-          const contract = new ethers.Contract(token.contractAddress, abi, provider);
-          
-          const balance = await contract['balanceOf'](this.walletAddress);
-          const formattedBalance = ethers.formatUnits(balance, token.decimals);
-          
-          token.balance = parseFloat(formattedBalance).toFixed(4);
-          
-          // Obtener valor en USD
-          const usdValue = await this.getTokenUSDValue(token.symbol, formattedBalance);
-          token.usdValue = usdValue;
-          
-        } catch (error: any) {
-          console.error(`Error loading balance for ${token.symbol}:`, error);
-          token.balance = 'Error';
-          token.usdValue = '0.00';
-        }
-      }
+    // Process tokens in batches to avoid overwhelming the network
+    const batchSize = 3;
+    for (let i = 0; i < this.tokenBalances.length; i += batchSize) {
+      const batch = this.tokenBalances.slice(i, i + batchSize);
+      const promises = batch
+        .filter(token => token.contractAddress)
+        .map(token => this.fetchTokenBalance(token, provider));
+      
+      await Promise.all(promises);
+    }
+  }
+
+  private async fetchTokenBalance(token: TokenBalance, provider: ethers.JsonRpcProvider) {
+    // Only run in browser environment
+    if (!this.isBrowser) {
+      return;
+    }
+    
+    try {
+      // ABI mínima para balanceOf
+      const abi = ['function balanceOf(address) view returns (uint256)'];
+      const contract = new ethers.Contract(token.contractAddress!, abi, provider);
+      
+      const balance = await contract['balanceOf'](this.walletAddress);
+      const formattedBalance = ethers.formatUnits(balance, token.decimals);
+      
+      token.balance = parseFloat(formattedBalance).toFixed(4);
+      
+      // Obtener valor en USD
+      const usdValue = await this.getTokenUSDValue(token.symbol, formattedBalance);
+      token.usdValue = usdValue;
+      
+    } catch (error: any) {
+      console.error(`Error loading balance for ${token.symbol}:`, error);
+      token.balance = 'Error';
+      token.usdValue = '0.00';
     }
   }
 
   private async getTokenUSDValue(symbol: string, amount: string): Promise<string> {
+    // Only run in browser environment
+    if (!this.isBrowser) {
+      return '0.00';
+    }
+    
     try {
       // Usar CoinGecko API para precios
       const response = await fetch(
@@ -367,14 +430,24 @@ export class WalletComponent implements OnInit, OnDestroy {
   }
 
   copyAddress() {
+    // Only run in browser environment
+    if (!this.isBrowser) {
+      return;
+    }
+    
     navigator.clipboard.writeText(this.walletAddress);
-    alert('Dirección copiada al portapapeles');
+    this.showNotification('Dirección copiada al portapapeles', 'success');
   }
 
   async refreshBalance() {
+    // Only run in browser environment
+    if (!this.isBrowser) {
+      return;
+    }
+    
     // Clear cache before refreshing
     (this.walletService as any).balanceCache.clear();
-    await this.loadWalletData();
+    this.refreshSubject.next();
   }
 
   disconnect() {
@@ -397,11 +470,16 @@ export class WalletComponent implements OnInit, OnDestroy {
   }
 
   receiveTokens() {
-    alert('Mostrar código QR próximamente');
+    this.showNotification('Mostrar código QR próximamente', 'info');
   }
 
   // Método para manejar el cambio de red desde el HTML
   onNetworkChange(event: Event): void {
+    // Only run in browser environment
+    if (!this.isBrowser) {
+      return;
+    }
+    
     const selectElement = event.target as HTMLSelectElement;
     const selectedChainId = selectElement.value;
     
@@ -413,6 +491,11 @@ export class WalletComponent implements OnInit, OnDestroy {
 
   // Método para cambiar de red
   async switchNetwork(chainId: string) {
+    // Only run in browser environment
+    if (!this.isBrowser) {
+      return;
+    }
+    
     if (!this.ethereum) {
       console.error('Ethereum provider not available');
       this.showNotification('Proveedor Ethereum no disponible', 'error');
@@ -456,6 +539,11 @@ export class WalletComponent implements OnInit, OnDestroy {
   }
 
   async addNetwork(chainId: string) {
+    // Only run in browser environment
+    if (!this.isBrowser) {
+      return;
+    }
+    
     const network = this.supportedNetworks[chainId];
     if (!network) {
       console.error('Network not supported:', chainId);
@@ -492,6 +580,11 @@ export class WalletComponent implements OnInit, OnDestroy {
   }
   
   private showNotification(message: string, type: 'success' | 'error' | 'info') {
+    // Only show notifications in browser environment
+    if (!this.isBrowser) {
+      return;
+    }
+    
     // Simple notification using alert for now
     // In a real application, you might want to implement a proper notification system
     switch(type) {
@@ -523,6 +616,11 @@ export class WalletComponent implements OnInit, OnDestroy {
   }
 
   private async loadBalancesForNetwork(chainId: string) {
+    // Only run in browser environment
+    if (!this.isBrowser) {
+      return;
+    }
+    
     // Update token configurations for the new network
     this.tokenBalances = this.tokenConfigs[chainId] || [
       { symbol: 'ETH', balance: '0.00', usdValue: '0.00', icon: '⟠', decimals: 18 }

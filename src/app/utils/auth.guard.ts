@@ -1,6 +1,8 @@
-import { Injectable } from '@angular/core';
+import { Injectable, Inject, PLATFORM_ID } from '@angular/core';
+import { isPlatformBrowser } from '@angular/common';
 import { CanActivate, ActivatedRouteSnapshot, RouterStateSnapshot, Router, UrlTree } from '@angular/router';
-import { Observable } from 'rxjs';
+import { Observable, from, of } from 'rxjs';
+import { catchError, map, timeout } from 'rxjs/operators';
 
 declare global {
   interface Window {
@@ -12,7 +14,14 @@ declare global {
   providedIn: 'root'
 })
 export class AuthGuard implements CanActivate {
-  constructor(private router: Router) { }
+  private isBrowser: boolean;
+
+  constructor(
+    private router: Router,
+    @Inject(PLATFORM_ID) private platformId: Object
+  ) { 
+    this.isBrowser = isPlatformBrowser(platformId);
+  }
 
   canActivate(
     route: ActivatedRouteSnapshot,
@@ -20,33 +29,45 @@ export class AuthGuard implements CanActivate {
   ): Observable<boolean | UrlTree> | Promise<boolean | UrlTree> | boolean | UrlTree {
     
     // Verificar si estamos en el cliente (navegador)
-    if (typeof window === 'undefined') {
+    if (!this.isBrowser) {
       return false;
     }
 
     // Verificar si hay wallet conectado
     if (window.ethereum) {
       try {
-        // Obtener cuentas conectadas
-        return this.checkWalletConnection();
+        // Obtener cuentas conectadas con timeout
+        return from(this.checkWalletConnection()).pipe(
+          timeout(5000), // 5 second timeout
+          catchError((error) => {
+            console.error('Error en AuthGuard:', error);
+            return of(this.router.createUrlTree(['/login']));
+          })
+        );
       } catch (error) {
         console.error('Error en AuthGuard:', error);
-        this.router.navigate(['/login']);
-        return false;
+        return this.router.createUrlTree(['/login']);
       }
     } else {
       console.warn('No hay wallet disponible');
-      this.router.navigate(['/login']);
-      return false;
+      return this.router.createUrlTree(['/login']);
     }
   }
 
   private async checkWalletConnection(): Promise<boolean | UrlTree> {
     try {
-      // Solicitar cuentas conectadas
-      const accounts = await window.ethereum.request({
+      // Solicitar cuentas conectadas con timeout
+      const accountsPromise = window.ethereum.request({
         method: 'eth_accounts',
       });
+
+      // Add timeout to the promise
+      const accounts = await Promise.race([
+        accountsPromise,
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Timeout')), 5000)
+        )
+      ]);
 
       // Si hay cuentas conectadas, permitir acceso
       if (accounts && accounts.length > 0) {

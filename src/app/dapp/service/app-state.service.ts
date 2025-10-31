@@ -65,4 +65,13 @@ export class AppStateService {
   resetState() {
     this.appStateSubject.next(this.initialState);
   }
+
+  // Update multiple state properties at once
+  updateState(partialState: Partial<AppState>) {
+    const currentState = this.appStateSubject.value;
+    this.appStateSubject.next({
+      ...currentState,
+      ...partialState
+    });
+  }
 }

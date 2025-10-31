@@ -225,6 +225,18 @@
                 </span>
               </div>
 
+              <div class="tx-explorer" *ngIf="getExplorerUrl(tx)">
+                <span class="tx-explorer-label">Explorer:</span>
+                <a 
+                  class="tx-explorer-link" 
+                  [href]="getExplorerUrl(tx)" 
+                  target="_blank"
+                  (click)="$event.stopPropagation()"
+                >
+                  Ver en Block Explorer
+                </a>
+              </div>
+
               <div class="tx-actions">
                 <button 
                   class="btn-action" 
@@ -235,8 +247,8 @@
                 </button>
                 <button 
                   class="btn-action" 
-                  (click)="viewOnExplorer(tx.hash)" 
-                  *ngIf="currentNetwork?.explorer"
+                  (click)="viewOnExplorer(tx.hash, tx.chainId)" 
+                  *ngIf="getExplorerUrl(tx)"
                   title="Ver en explorador de bloques"
                 >
                   🔍 Ver en Explorer

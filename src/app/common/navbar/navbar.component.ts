@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, Inject, PLATFORM_ID } from '@angular/core';
+import { isPlatformBrowser } from '@angular/common';
 import { WalletService } from '../../dapp/service/wallet.service';
 import { Router, RouterModule } from '@angular/router';
 import { NetworkSwitcherComponent } from '../../dapp/components/network-switcher/network-switcher.component';
@@ -18,10 +19,15 @@ export class NavbarComponent implements OnInit {
   address: string = '';
   shortened: string = '';
   avatarUrl: string = '';
+  private isBrowser: boolean;
 
   constructor(
     private walletService: WalletService,
-    private router: Router) { }
+    private router: Router,
+    @Inject(PLATFORM_ID) private platformId: Object
+  ) { 
+    this.isBrowser = isPlatformBrowser(platformId);
+  }
 
   ngOnInit(): void {
     const acc = this.walletService.getAccount() ?? '';
@@ -31,6 +37,11 @@ export class NavbarComponent implements OnInit {
   }
 
   copiarUsuario(texto: string) {
+    // Only run in browser environment
+    if (!this.isBrowser) {
+      return;
+    }
+    
     if (!texto) return;
     navigator.clipboard.writeText(texto).then(() => {
     }, err => {
