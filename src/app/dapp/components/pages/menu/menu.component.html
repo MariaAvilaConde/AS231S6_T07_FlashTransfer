@@ -1,301 +1,269 @@
 <div class="dapp-container">
-        <!-- Header with Web3 Login -->
-        <header class="header">
-                <div class="header-content">
-                        <div class="logo">
-                                <div class="logo-icon">⚡</div>
-                                <h1 class="logo-text">FlashTransfer</h1>
-                        </div>
+  <!-- Wallet Connection Modal -->
+  <div class="modal-overlay" *ngIf="showWalletModal" (click)="closeWalletModal()">
+    <div class="modal-content" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h2 class="modal-title">Conectar Wallet</h2>
+        <button class="modal-close" (click)="closeWalletModal()">&times;</button>
+      </div>
+      <p class="modal-description">
+        Conecta tu wallet para acceder a todas las funciones de FlashTransfer. 
+        Asegúrate de tener instalada una wallet compatible.
+      </p>
+      <div class="wallet-options">
+        <button 
+          *ngFor="let wallet of walletOptions" 
+          class="wallet-option" 
+          [class.wallet-option-disabled]="!wallet.available"
+          (click)="selectWallet(wallet.id)"
+          [disabled]="!wallet.available || isConnecting"
+        >
+          <div class="wallet-option-icon">{{ wallet.icon }}</div>
+          <div class="wallet-option-info">
+            <h3 class="wallet-option-name">{{ wallet.name }}</h3>
+            <p class="wallet-option-description">{{ wallet.description }}</p>
+          </div>
+          <div class="wallet-option-arrow">→</div>
+          <div *if="!wallet.available" class="wallet-option-badge">Próximamente</div>
+        </button>
+      </div>
+      <div class="modal-footer">
+        <p class="modal-footer-text">
+          ¿No tienes una wallet? <a href="https://metamask.io/" target="_blank" class="modal-link">Descarga MetaMask</a>
+        </p>
+      </div>
+    </div>
+  </div>
 
-                        <div class="wallet-section">
-                                <!-- Botón para conectar wallet -->
-                                <button *ngIf="!isConnected" (click)="openWalletModal()"
-                                        [disabled]="isConnecting" class="connect-button">
-                                        <span class="button-icon">🦊</span>
-                                        {{ isConnecting ? 'Conectando...' : 'Conectar Wallet' }}
-                                </button>
+  <!-- Header -->
+  <header class="header">
+    <div class="header-content">
+      <div class="logo" (click)="goToDashboard()">
+        <span class="logo-icon">⚡</span>
+        <h1 class="logo-text">FlashTransfer</h1>
+      </div>
+      <div class="wallet-section">
+        <ng-container *ngIf="!isConnected; else connectedWallet">
+          <button 
+            class="connect-button" 
+            (click)="openWalletModal()" 
+            [disabled]="isConnecting"
+          >
+            <span class="button-icon">🦊</span>
+            <span *ngIf="!isConnecting">Conectar Wallet</span>
+            <span *ngIf="isConnecting">Conectando...</span>
+          </button>
+        </ng-container>
+        <ng-template #connectedWallet>
+          <div class="wallet-info">
+            <div class="status-dot"></div>
+            <div class="wallet-address">
+              {{ formatAddress(walletAddress) }}
+            </div>
+          </div>
+          <button class="disconnect-button" (click)="disconnectWallet()">
+            Desconectar
+          </button>
+        </ng-template>
+      </div>
+    </div>
+  </header>
 
-                                <!-- Botón cuando ya está conectado - va al dashboard -->
-                                <div *ngIf="isConnected" class="wallet-info">
-                                        <button (click)="goToDashboard()" class="wallet-address">
-                                                <span class="status-dot"></span>
-                                                {{ formatAddress(walletAddress) }}
-                                        </button>
-                                </div>
-                        </div>
-                </div>
-        </header>
-
-        <!-- Wallet Modal -->
-        <div class="modal-overlay" *ngIf="showWalletModal" (click)="closeWalletModal()">
-                <div class="modal-content" (click)="$event.stopPropagation()">
-                        <div class="modal-header">
-                                <h2 class="modal-title">Conectar Wallet</h2>
-                                <button class="modal-close" (click)="closeWalletModal()">✕</button>
-                        </div>
-
-                        <p class="modal-description">
-                                Elige tu wallet preferida para conectarte a FlashTransfer
-                        </p>
-
-                        <div class="wallet-options">
-                                <button *ngFor="let wallet of walletOptions" class="wallet-option"
-                                        [class.wallet-option-disabled]="!wallet.available"
-                                        [disabled]="!wallet.available || isConnecting"
-                                        (click)="selectWallet(wallet.id)">
-                                        <div class="wallet-option-icon">{{ wallet.icon }}</div>
-                                        <div class="wallet-option-info">
-                                                <h3 class="wallet-option-name">{{ wallet.name }}</h3>
-                                                <p class="wallet-option-description">{{ wallet.description }}
-                                                </p>
-                                        </div>
-                                        <div class="wallet-option-arrow" *ngIf="wallet.available">→</div>
-                                        <div class="wallet-option-badge" *ngIf="!wallet.available">Próximamente
-                                        </div>
-                                </button>
-                        </div>
-
-                        <div class="modal-footer">
-                                <p class="modal-footer-text">
-                                        ¿No tienes una wallet?
-                                        <a href="https://metamask.io/download/" target="_blank"
-                                                class="modal-link">
-                                                Descarga MetaMask
-                                        </a>
-                                </p>
-                        </div>
-                </div>
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="hero-background">
+      <div class="floating-shape shape-1"></div>
+      <div class="floating-shape shape-2"></div>
+      <div class="floating-shape shape-3"></div>
+    </div>
+    <div class="hero-content">
+      <div class="hero-badge">TECNOLOGÍA DE PUNTA</div>
+      <h1 class="hero-title">Transferencias Flash al Instante</h1>
+      <p class="hero-subtitle">
+        La plataforma más segura y rápida para transferir criptomonedas. 
+        Conecta tu wallet y experimenta la revolución financiera descentralizada.
+      </p>
+      <div class="hero-stats">
+        <div class="stat-item">
+          <div class="stat-number">10K+</div>
+          <div class="stat-label">Usuarios</div>
         </div>
+        <div class="stat-item">
+          <div class="stat-number">50+</div>
+          <div class="stat-label">Redes</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-number">99.9%</div>
+          <div class="stat-label">Uptime</div>
+        </div>
+      </div>
+    </div>
+  </section>
 
-        <!-- Hero Section -->
-        <section class="hero">
-                <div class="hero-content">
-                        <div class="hero-badge">🚀 Transferencias Instantáneas</div>
-                        <h2 class="hero-title">Bienvenido a FlashTransfer</h2>
-                        <p class="hero-subtitle">La plataforma descentralizada más rápida para transferencias
-                                blockchain</p>
-                        <div class="hero-stats">
-                                <div class="stat-item">
-                                        <div class="stat-number">&lt; 2s</div>
-                                        <div class="stat-label">Tiempo de Transacción</div>
-                                </div>
-                                <div class="stat-item">
-                                        <div class="stat-number">0.1%</div>
-                                        <div class="stat-label">Comisión</div>
-                                </div>
-                                <div class="stat-item">
-                                        <div class="stat-number">24/7</div>
-                                        <div class="stat-label">Disponibilidad</div>
-                                </div>
-                        </div>
-                </div>
-                <div class="hero-background">
-                        <div class="floating-shape shape-1"></div>
-                        <div class="floating-shape shape-2"></div>
-                        <div class="floating-shape shape-3"></div>
-                </div>
-        </section>
+  <!-- Main Content -->
+  <main class="main-content">
+    <!-- Objectives Section -->
+    <section class="section">
+      <div class="section-header">
+        <div class="section-number">01</div>
+        <h2 class="section-title">Nuestros Objetivos</h2>
+      </div>
+      <div class="section-content">
+        <p class="section-text">
+          FlashTransfer se compromete a revolucionar la forma en que interactuamos con las finanzas descentralizadas, 
+          ofreciendo soluciones innovadoras que priorizan la seguridad, velocidad y accesibilidad.
+        </p>
+        <div class="objectives-grid">
+          <div class="objective-card">
+            <div class="objective-icon">🔒</div>
+            <h3 class="objective-title">Seguridad Máxima</h3>
+            <p class="objective-text">
+              Implementamos los más altos estándares de seguridad para proteger tus activos digitales 
+              en todo momento.
+            </p>
+          </div>
+          <div class="objective-card">
+            <div class="objective-icon">⚡</div>
+            <h3 class="objective-title">Velocidad Extrema</h3>
+            <p class="objective-text">
+              Transferencias instantáneas con las tecnologías más avanzadas del ecosistema blockchain.
+            </p>
+          </div>
+          <div class="objective-card">
+            <div class="objective-icon">🌐</div>
+            <h3 class="objective-title">Accesibilidad Global</h3>
+            <p class="objective-text">
+              Plataforma accesible para todos, sin importar su nivel de experiencia en criptomonedas.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
 
-        <!-- Main Content -->
-        <main class="main-content">
+    <!-- Benefits Section -->
+    <section class="section">
+      <div class="section-header">
+        <div class="section-number">02</div>
+        <h2 class="section-title">Beneficios Clave</h2>
+      </div>
+      <div class="section-content">
+        <div class="benefits-list">
+          <div class="benefit-item">
+            <div class="benefit-icon">🚀</div>
+            <div class="benefit-content">
+              <h3 class="benefit-title">Transacciones Ultrarrápidas</h3>
+              <p class="benefit-text">
+                Nuestra infraestructura optimizada permite transferencias en segundos, 
+                eliminando los tiempos de espera tradicionales de las blockchains.
+              </p>
+            </div>
+          </div>
+          <div class="benefit-item">
+            <div class="benefit-icon">🛡️</div>
+            <div class="benefit-content">
+              <h3 class="benefit-title">Protección Avanzada</h3>
+              <p class="benefit-text">
+                Sistemas de autenticación multifactor y auditorías de seguridad regulares 
+                para garantizar la integridad de tus transacciones.
+              </p>
+            </div>
+          </div>
+          <div class="benefit-item">
+            <div class="benefit-icon">💱</div>
+            <div class="benefit-content">
+              <h3 class="benefit-title">Soporte Multi-Red</h3>
+              <p class="benefit-text">
+                Compatible con las principales redes blockchain como Ethereum, Polygon, 
+                Binance Smart Chain y muchas más.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
 
-                <!-- 1. Descripción -->
-                <section class="section description-section">
-                        <div class="section-header">
-                                <span class="section-number">01</span>
-                                <h3 class="section-title">Descripción del Proyecto</h3>
-                        </div>
-                        <div class="section-content">
-                                <p class="section-text">
-                                        <strong>FlashTransfer</strong> es una plataforma descentralizada de
-                                        última generación que revoluciona
-                                        las transferencias blockchain. Utilizando tecnología de capa 2 y
-                                        contratos inteligentes optimizados,
-                                        ofrecemos transacciones ultrarrápidas con las comisiones más bajas del
-                                        mercado.
-                                </p>
-                                <p class="section-text">
-                                        Nuestra arquitectura multi-chain permite transferencias instantáneas
-                                        entre diferentes redes blockchain,
-                                        eliminando la complejidad y los tiempos de espera tradicionales. Todo
-                                        esto con seguridad de nivel
-                                        empresarial y transparencia total garantizada por la blockchain.
-                                </p>
-                        </div>
-                </section>
+    <!-- Features Section -->
+    <section class="section">
+      <div class="section-header">
+        <div class="section-number">03</div>
+        <h2 class="section-title">Características Técnicas</h2>
+      </div>
+      <div class="section-content">
+        <div class="features-grid">
+          <div class="feature-card">
+            <div class="feature-icon">🔬</div>
+            <h3 class="feature-title">Smart Contracts Auditados</h3>
+            <p class="feature-text">
+              Todos nuestros contratos inteligentes han sido auditados por expertos 
+              en seguridad blockchain para garantizar su fiabilidad.
+            </p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">📊</div>
+            <h3 class="feature-title">Dashboard Analítico</h3>
+            <p class="feature-text">
+              Panel de control completo con métricas en tiempo real, historial de transacciones 
+              y análisis detallado de tu actividad.
+            </p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">🔄</div>
+            <h3 class="feature-title">Intercambio Cross-Chain</h3>
+            <p class="feature-text">
+              Facilitamos el intercambio de activos entre diferentes blockchains 
+              sin necesidad de intermediarios externos.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
 
-                <!-- 2. Objetivos -->
-                <section class="section objectives-section">
-                        <div class="section-header">
-                                <span class="section-number">02</span>
-                                <h3 class="section-title">Objetivos</h3>
-                        </div>
-                        <div class="objectives-grid">
-                                <div class="objective-card">
-                                        <div class="objective-icon">⚡</div>
-                                        <h4 class="objective-title">Velocidad Extrema</h4>
-                                        <p class="objective-text">
-                                                Transacciones confirmadas en menos de 2 segundos gracias a
-                                                nuestra tecnología de capa 2.
-                                        </p>
-                                </div>
-                                <div class="objective-card">
-                                        <div class="objective-icon">💰</div>
-                                        <h4 class="objective-title">Costos Mínimos</h4>
-                                        <p class="objective-text">
-                                                Comisiones reducidas al 0.1%, las más competitivas del
-                                                ecosistema blockchain.
-                                        </p>
-                                </div>
-                                <div class="objective-card">
-                                        <div class="objective-icon">🔒</div>
-                                        <h4 class="objective-title">Seguridad Total</h4>
-                                        <p class="objective-text">
-                                                Protección de activos con criptografía de última generación y
-                                                auditorías constantes.
-                                        </p>
-                                </div>
-                                <div class="objective-card">
-                                        <div class="objective-icon">🌐</div>
-                                        <h4 class="objective-title">Multi-Chain</h4>
-                                        <p class="objective-text">
-                                                Soporte para múltiples blockchains con transferencias
-                                                cross-chain instantáneas.
-                                        </p>
-                                </div>
-                        </div>
-                </section>
+    <!-- Team Section -->
+    <section class="section">
+      <div class="section-header">
+        <div class="section-number">04</div>
+        <h2 class="section-title">Nuestro Equipo</h2>
+      </div>
+      <div class="section-content">
+        <p class="team-intro">
+          Un equipo de desarrolladores y expertos en blockchain comprometidos con la innovación 
+          y la excelencia tecnológica.
+        </p>
+        <div class="team-grid">
+          <div class="team-card" *ngFor="let member of teamMembers">
+            <div class="team-photo-wrapper">
+              <img [src]="member.photo" [alt]="member.name" class="team-photo">
+              <div class="team-overlay"></div>
+            </div>
+            <h3 class="team-name">{{ member.name }}</h3>
+            <p class="team-role">{{ member.role }}</p>
+            <p class="team-bio">
+              Líder en el desarrollo de soluciones blockchain con experiencia en smart contracts 
+              y arquitecturas descentralizadas.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
 
-                <!-- 3. Beneficios -->
-                <section class="section benefits-section">
-                        <div class="section-header">
-                                <span class="section-number">03</span>
-                                <h3 class="section-title">Beneficios</h3>
-                        </div>
-                        <div class="benefits-list">
-                                <div class="benefit-item">
-                                        <div class="benefit-icon">✓</div>
-                                        <div class="benefit-content">
-                                                <h4 class="benefit-title">Transferencias Instantáneas</h4>
-                                                <p class="benefit-text">Envía y recibe criptomonedas en menos de
-                                                        2 segundos, sin importar la red.</p>
-                                        </div>
-                                </div>
-                                <div class="benefit-item">
-                                        <div class="benefit-icon">✓</div>
-                                        <div class="benefit-content">
-                                                <h4 class="benefit-title">Comisiones Ultra Bajas</h4>
-                                                <p class="benefit-text">Ahorra hasta un 95% en comisiones
-                                                        comparado con plataformas tradicionales.</p>
-                                        </div>
-                                </div>
-                                <div class="benefit-item">
-                                        <div class="benefit-icon">✓</div>
-                                        <div class="benefit-content">
-                                                <h4 class="benefit-title">Interfaz Intuitiva</h4>
-                                                <p class="benefit-text">Diseño moderno y fácil de usar, perfecto
-                                                        para principiantes y expertos.</p>
-                                        </div>
-                                </div>
-                                <div class="benefit-item">
-                                        <div class="benefit-icon">✓</div>
-                                        <div class="benefit-content">
-                                                <h4 class="benefit-title">Soporte 24/7</h4>
-                                                <p class="benefit-text">Equipo de atención al cliente disponible
-                                                        en todo momento para ayudarte.</p>
-                                        </div>
-                                </div>
-                                <div class="benefit-item">
-                                        <div class="benefit-icon">✓</div>
-                                        <div class="benefit-content">
-                                                <h4 class="benefit-title">Sin Límites</h4>
-                                                <p class="benefit-text">Transfiere cualquier cantidad sin
-                                                        restricciones ni límites diarios.</p>
-                                        </div>
-                                </div>
-                        </div>
-                </section>
-
-                <!-- 4. Características -->
-                <section class="section features-section">
-                        <div class="section-header">
-                                <span class="section-number">04</span>
-                                <h3 class="section-title">Características</h3>
-                        </div>
-                        <div class="features-grid">
-                                <div class="feature-card">
-                                        <div class="feature-icon">🔗</div>
-                                        <h4 class="feature-title">Integración MetaMask</h4>
-                                        <p class="feature-text">Conexión segura con tu wallet favorita en un
-                                                solo clic.</p>
-                                </div>
-                                <div class="feature-card">
-                                        <div class="feature-icon">📊</div>
-                                        <h4 class="feature-title">Dashboard en Tiempo Real</h4>
-                                        <p class="feature-text">Monitorea todas tus transacciones y saldos
-                                                instantáneamente.</p>
-                                </div>
-                                <div class="feature-card">
-                                        <div class="feature-icon">➽</div>
-                                        <h4 class="feature-title">Bridge Cross-Chain</h4>
-                                        <p class="feature-text">Transfiere activos entre diferentes blockchains
-                                                sin fricciones.</p>
-                                </div>
-                                <div class="feature-card">
-                                        <div class="feature-icon">🔐</div>
-                                        <h4 class="feature-title">Encriptación Avanzada</h4>
-                                        <p class="feature-text">Tus datos y transacciones protegidos con
-                                                tecnología militar.</p>
-                                </div>
-                                <div class="feature-card">
-                                        <div class="feature-icon">📱</div>
-                                        <h4 class="feature-title">100% Responsive</h4>
-                                        <p class="feature-text">Funciona perfectamente en móviles, tablets y
-                                                escritorio.</p>
-                                </div>
-                                <div class="feature-card">
-                                        <div class="feature-icon">⚙️</div>
-                                        <h4 class="feature-title">API Completa</h4>
-                                        <p class="feature-text">Integra FlashTransfer en tus propias
-                                                aplicaciones fácilmente.</p>
-                                </div>
-                        </div>
-                </section>
-
-                <!-- 5. Equipo -->
-                <section class="section team-section">
-                        <div class="section-header">
-                                <span class="section-number">05</span>
-                                <h3 class="section-title">Nuestro Equipo</h3>
-                        </div>
-                        <p class="team-intro">
-                                Conoce a las expertas que hacen posible FlashTransfer
-                        </p>
-                        <div class="team-grid">
-                                <div *ngFor="let member of teamMembers" class="team-card">
-                                        <div class="team-photo-wrapper">
-                                                <img [src]="member.photo" [alt]="member.name"
-                                                        class="team-photo">
-                                                <div class="team-overlay"></div>
-                                        </div>
-                                        <h4 class="team-name">{{ member.name }}</h4>
-                                        <p class="team-role">{{ member.role }}</p>
-                                </div>
-                        </div>
-                </section>
-
-        </main>
-
-        <!-- Footer -->
-        <footer class="footer">
-                <div class="footer-content">
-                        <div class="footer-logo">
-                                <span class="footer-icon">⚡</span>
-                                <span class="footer-brand">FlashTransfer</span>
-                        </div>
-                        <p class="footer-text">© 2025 FlashTransfer. Todos los derechos reservados.</p>
-                        <p class="footer-text">Construido con Angular 17 y Web3 | Desarrollado por María Avila &
-                                Kasandra Chumpitaz</p>
-                </div>
-        </footer>
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="footer-content">
+      <h2 class="footer-logo">FlashTransfer</h2>
+      <p class="footer-text">
+        La plataforma líder en transferencias criptográficas rápidas y seguras. 
+        Únete a la revolución financiera descentralizada.
+      </p>
+      <div class="footer-links">
+        <a href="#" class="footer-link">Términos de Uso</a>
+        <a href="#" class="footer-link">Política de Privacidad</a>
+        <a href="#" class="footer-link">Documentación</a>
+        <a href="#" class="footer-link">Soporte</a>
+      </div>
+      <p class="copyright">
+        &copy; 2025 FlashTransfer. Todos los derechos reservados.
+      </p>
+    </div>
+  </footer>
 </div>

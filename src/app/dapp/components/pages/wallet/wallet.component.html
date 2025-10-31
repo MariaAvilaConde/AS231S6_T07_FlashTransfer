@@ -7,19 +7,10 @@
         <h1 class="logo-text">FlashTransfer</h1>
       </div>
       <div class="header-actions">
-        <!-- Selector de Red -->
-        <div class="network-selector">
-          <select (change)="onNetworkChange($event)" [value]="chainId" class="network-select">
-            <option value="0xaa36a7">Sepolia Testnet</option>
-            <option value="0x4268">Ethereum Holesky</option>
-            <option value="0x1">Ethereum Mainnet</option>
-            <option value="0x5">Goerli Testnet</option>
-            <option value="0x89">Polygon Mainnet</option>
-            <option value="0x13881">Mumbai Testnet</option>
-          </select>
-        </div>
+        <!-- Network Switcher Component -->
+        <app-network-switcher></app-network-switcher>
         <button class="disconnect-btn" (click)="disconnect()">
-          <span>🚪</span> Desconectar
+          <span class="btn-icon">🚪</span> Desconectar
         </button>
       </div>
     </div>

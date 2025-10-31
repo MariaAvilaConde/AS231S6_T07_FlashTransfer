@@ -51,10 +51,14 @@ export class WalletService {
 
   //Método para desloguearte de la aplicación
   logout(): void {
-  this.account = null;
-  localStorage.removeItem('account');
-  this.balanceCache.clear();
-}
+    this.account = null;
+    localStorage.removeItem('account');
+    localStorage.removeItem('selectedNetwork');
+    this.balanceCache.clear();
+    
+    // Notify network service to reset network
+    this.networkService.setCurrentNetwork(null as any);
+  }
 
   // Get balance with caching
   async getBalance(address: string, chainId: string): Promise<string> {
