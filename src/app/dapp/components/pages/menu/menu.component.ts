@@ -265,11 +265,7 @@ export class MenuComponent implements OnInit {
       window.ethereum.removeAllListeners('chainChanged');
     }
     
-    // Clear all local storage items related to the app
-    localStorage.removeItem('account');
-    localStorage.removeItem('selectedNetwork');
-    
-    // Navigate to main menu page
+    // Navigate to home page
     this.router.navigate(['/']);
   }
 

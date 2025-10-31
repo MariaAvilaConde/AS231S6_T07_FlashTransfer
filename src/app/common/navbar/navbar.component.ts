@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, HostListener } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 import { WalletService } from '../../dapp/service/wallet.service';
 import { Router, RouterModule } from '@angular/router';
 import { NetworkSwitcherComponent } from '../../dapp/components/network-switcher/network-switcher.component';
@@ -30,23 +30,9 @@ export class NavbarComponent implements OnInit {
     this.avatarUrl = acc ? `https://api.dicebear.com/7.x/identicon/svg?seed=${acc}` : '';
   }
 
-  @HostListener('document:click', ['$event'])
-  clickOutside(event: Event) {
-    const target = event.target as HTMLElement;
-    if (!target.closest('.user-menu') && this.userMenuOpen) {
-      this.userMenuOpen = false;
-    }
-    
-    if (!target.closest('.mobile-menu') && !target.closest('.mobile-menu-button') && this.menuAbierto) {
-      this.menuAbierto = false;
-    }
-  }
-
   copiarUsuario(texto: string) {
     if (!texto) return;
     navigator.clipboard.writeText(texto).then(() => {
-      // Show success feedback
-      console.log('Dirección copiada al portapapeles');
     }, err => {
       console.error('Error al copiar', err);
     });
@@ -65,28 +51,11 @@ export class NavbarComponent implements OnInit {
   }
 
   logout(): void {
-    // Remove all event listeners
-    if (typeof window !== 'undefined' && (window as any).ethereum) {
-      (window as any).ethereum.removeAllListeners();
-    }
-    
-    // Clear all local storage items related to the app
-    localStorage.removeItem('account');
-    localStorage.removeItem('selectedNetwork');
-    
-    // Clear wallet service data
     this.walletService.logout();
-    
-    // Reset component state
     this.address = '';
     this.shortened = '';
     this.avatarUrl = '';
-    
-    // Close menus
-    this.userMenuOpen = false;
-    this.menuAbierto = false;
-    
-    // Navigate to main menu page
-    this.router.navigate(['/']);
+    this.router.navigate(['/login']);
   }
+
 }

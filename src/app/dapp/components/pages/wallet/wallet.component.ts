@@ -4,7 +4,6 @@ import { Router } from '@angular/router';
 import { ethers } from 'ethers';
 import { WalletService } from '../../../service/wallet.service';
 import { NetworkService, Network as NetworkModel } from '../../../service/network.service';
-import { NetworkSwitcherComponent } from '../../network-switcher/network-switcher.component';
 
 interface TokenBalance {
   symbol: string;
@@ -26,7 +25,7 @@ interface NetworkConfig {
 @Component({
   selector: 'app-wallet',
   standalone: true,
-  imports: [CommonModule, NetworkSwitcherComponent],
+  imports: [CommonModule],
   templateUrl: './wallet.component.html',
   styleUrl: './wallet.component.css'
 })
@@ -369,7 +368,7 @@ export class WalletComponent implements OnInit, OnDestroy {
 
   copyAddress() {
     navigator.clipboard.writeText(this.walletAddress);
-    this.showNotification('Dirección copiada al portapapeles', 'success');
+    alert('Dirección copiada al portapapeles');
   }
 
   async refreshBalance() {
@@ -382,28 +381,9 @@ export class WalletComponent implements OnInit, OnDestroy {
     console.log('Disconnecting wallet...');
     // Remove event listeners first
     this.removeEventListeners();
-    
-    // Clear all local storage items related to the app
-    localStorage.removeItem('account');
-    localStorage.removeItem('selectedNetwork');
-    
     // Clear wallet service data
     this.walletService.logout();
-    
-    // Disconnect from MetaMask if possible
-    if (this.ethereum && this.ethereum.request) {
-      // Attempt to disconnect from MetaMask
-      this.ethereum.request({
-        method: 'wallet_revokePermissions',
-        params: [{
-          eth_accounts: {}
-        }]
-      }).catch((error: any) => {
-        console.log('Could not revoke permissions from MetaMask:', error);
-      });
-    }
-    
-    // Navigate to main menu
+    // Navigate to home
     this.router.navigate(['/']);
   }
 
@@ -417,7 +397,7 @@ export class WalletComponent implements OnInit, OnDestroy {
   }
 
   receiveTokens() {
-    this.showNotification('Mostrar código QR próximamente', 'info');
+    alert('Mostrar código QR próximamente');
   }
 
   // Método para manejar el cambio de red desde el HTML
@@ -529,11 +509,6 @@ export class WalletComponent implements OnInit, OnDestroy {
     // Show alert for user feedback
     if (type === 'error') {
       alert(`Error: ${message}`);
-    } else if (type === 'success') {
-      // For success messages, we don't show alerts to avoid interrupting user experience
-      // In a real app, you would show a toast notification
-    } else {
-      // For info messages, we don't show alerts
     }
   }
 

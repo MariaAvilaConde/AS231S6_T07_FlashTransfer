@@ -58,21 +58,18 @@ export class AuthGuard implements CanActivate {
         } else {
           // Account mismatch, force logout
           localStorage.removeItem('account');
-          localStorage.removeItem('selectedNetwork');
           return this.router.createUrlTree(['/login']);
         }
       } else {
         console.warn('No hay cuentas conectadas');
         // Clear stored account if no accounts connected
         localStorage.removeItem('account');
-        localStorage.removeItem('selectedNetwork');
         return this.router.createUrlTree(['/login']);
       }
     } catch (error) {
       console.error('Error verificando wallet:', error);
       // Clear stored account on error
       localStorage.removeItem('account');
-      localStorage.removeItem('selectedNetwork');
       return this.router.createUrlTree(['/login']);
     }
   }

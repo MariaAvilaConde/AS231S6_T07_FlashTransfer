@@ -561,11 +561,8 @@ Explorer: ${explorerUrl}
     }
     
     // Clear local storage
-    if (this.walletAddress) {
-      localStorage.removeItem(`transactions_${this.walletAddress}`);
-    }
+    localStorage.removeItem(`transactions_${this.walletAddress}`);
     localStorage.removeItem('account');
-    localStorage.removeItem('selectedNetwork');
     
     // Clear wallet data
     this.walletAddress = '';
@@ -578,8 +575,8 @@ Explorer: ${explorerUrl}
     // Use wallet service to properly logout
     this.walletService.logout();
     
-    // Navigate to main menu page
-    this.router.navigate(['/']);
+    // Navigate to login page
+    this.router.navigate(['/login']);
   }
 
   setMaxAmount() {
