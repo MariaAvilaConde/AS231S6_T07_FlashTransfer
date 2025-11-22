@@ -1,165 +1,197 @@
-import {Injectable, Inject, PLATFORM_ID} from '@angular/core';
-import {isPlatformBrowser} from '@angular/common';
-import {ethers, BrowserProvider, JsonRpcProvider} from 'ethers';
+import { Injectable, Inject, PLATFORM_ID } from '@angular/core';
+import { isPlatformBrowser } from '@angular/common';
+import { ethers, BrowserProvider } from 'ethers';
 import { environment } from '../../../environments/environment';
 import { NetworkService } from './network.service';
-import { BehaviorSubject, Observable, of } from 'rxjs';
-import { catchError, timeout } from 'rxjs/operators';
+import { BehaviorSubject } from 'rxjs';
 
 @Injectable({
   providedIn: 'root'
 })
 export class WalletService {
-
   private smartContractHolesky = environment.api.smartContractHolesky;
-  // RPC público para Holesky
-  private jsonProvider = new JsonRpcProvider('https://ethereum-holesky.publicnode.com');
+  
+  // NO usar JsonRpcProvider - solo BrowserProvider (MetaMask)
   private provider: ethers.BrowserProvider | null = null;
   private account: string | null = null;
   private isBrowser: boolean;
   
-  // Cache for balances to avoid repeated requests
   private balanceCache: Map<string, {balance: string, timestamp: number}> = new Map();
-  private cacheExpiry = 30000; // 30 seconds
+  private cacheExpiry = 30000;
+
+  private networkSubject = new BehaviorSubject<string>('holesky');
+  public networkChanged$ = this.networkSubject.asObservable();
 
   constructor(
     private networkService: NetworkService,
     @Inject(PLATFORM_ID) private platformId: Object
   ) {
     this.isBrowser = isPlatformBrowser(platformId);
+
+    if (this.isBrowser && (window as any).ethereum) {
+      (window as any).ethereum.on('chainChanged', (chainId: string) => {
+        console.log(`🔔 Chain changed to: ${chainId}`);
+        const net = this.networkService.getNetworkByChainId(chainId);
+        const name = net ? net.name.toLowerCase() : 'unknown';
+        this.networkSubject.next(name);
+        
+        this.initProvider().catch(err => console.error('Error reinitializing provider:', err));
+      });
+    }
   }
 
-  //Re-inicializar el provider
   async initProvider(): Promise<void> {
-    // Only run in browser environment
     if (!this.isBrowser) {
-      throw new Error("No se puede inicializar el provider en este entorno");
+      throw new Error("No se puede inicializar el provider fuera del navegador");
     }
     
     if (window.ethereum) {
       this.provider = new ethers.BrowserProvider(window.ethereum);
+      console.log(`✅ BrowserProvider inicializado (MetaMask)`);
     } else {
       throw new Error("MetaMask no está instalado");
     }
   }
 
-  //Método para conectar a wallet Metamask
   async connectWallet(): Promise<string> {
-    // Only run in browser environment
     if (!this.isBrowser) {
-      throw new Error('No se puede conectar la wallet en este entorno');
+      throw new Error('No se puede conectar la wallet fuera del navegador');
     }
     
     if (!window.ethereum) {
       throw new Error('MetaMask no está instalado');
     }
+    
     await this.initProvider();
     const accounts = await this.provider!.send("eth_requestAccounts", []);
     this.account = accounts[0];
+    
     if (this.account) {
-      localStorage.setItem('account', this.account);
+      this.setLocalStorage('account', this.account);
     }
+    
+    console.log(`✅ Wallet conectada: ${this.account}`);
     return this.account!;
   }
 
-  //Método que devuelve la dirección de la cuenta del usuario
   getAccount(): string | null {
+    if (!this.isBrowser) return null;
     if (this.account) return this.account;
-    return localStorage.getItem('account');
+    const stored = this.getLocalStorage('account');
+    this.account = stored;
+    return this.account;
   }
 
-  //Método para desloguearte de la aplicación
   logout(): void {
     this.account = null;
-    localStorage.removeItem('account');
+    this.removeLocalStorage('account');
     this.balanceCache.clear();
+    console.log('👋 Sesión cerrada');
   }
 
-  // Get balance with caching
   async getBalance(address: string, chainId: string): Promise<string> {
-    // Only run in browser environment
-    if (!this.isBrowser) {
-      return '0.00';
-    }
+    if (!this.isBrowser) return '0.00';
     
     const cacheKey = `${address}-${chainId}`;
     const cached = this.balanceCache.get(cacheKey);
     
-    // Check if cache is valid
     if (cached && (Date.now() - cached.timestamp) < this.cacheExpiry) {
       return cached.balance;
     }
     
-    // If not in cache or expired, fetch new balance
-    if (!this.provider) {
-      await this.initProvider();
-    }
-    
     try {
+      if (!this.provider) await this.initProvider();
+      
       const balance = await this.provider!.getBalance(address);
       const formattedBalance = ethers.formatEther(balance);
       
-      // Update cache
       this.balanceCache.set(cacheKey, {
         balance: formattedBalance,
         timestamp: Date.now()
       });
       
+      console.log(`✅ Balance obtenido: ${formattedBalance}`);
       return formattedBalance;
     } catch (error) {
-      console.error('Error fetching balance:', error);
+      console.error(`❌ Error obteniendo balance:`, error);
       return '0.00';
     }
   }
 
-  // Método para cambiar de red
   async switchNetwork(chainId: string): Promise<boolean> {
-    // Only run in browser environment
-    if (!this.isBrowser) {
-      return false;
-    }
+    if (!this.isBrowser) return false;
     
     if (!(window as any).ethereum) {
       throw new Error('Ethereum provider not available');
     }
     
     try {
-      // Primero intentar cambiar a la red
       await (window as any).ethereum.request({
         method: 'wallet_switchEthereumChain',
         params: [{ chainId }],
       });
       
+      await this.initProvider();
+      console.log(`✅ Red cambiada a ${chainId}`);
       return true;
     } catch (switchError: any) {
-      // Este error code indica que la cadena no ha sido añadida a MetaMask
-      if (switchError.code === 4902) {
-        // Obtener la configuración de red del wallet component
-        // Necesitamos acceder a esta información de alguna manera
-        // Por ahora lanzamos el error para que sea manejado por el componente
-        throw switchError;
-      }
-      console.error('Error switching network:', switchError);
+      if (switchError.code === 4902) throw switchError;
+      console.error('❌ Error cambiando de red:', switchError);
       throw switchError;
     }
   }
 
-  // Obtener la red actual
   getCurrentNetwork() {
     return this.networkService.getCurrentNetwork();
   }
 
-  // Clear balance cache for a specific address
+  getNetwork(): string {
+    return this.networkSubject.value;
+  }
+
+  getProvider(): BrowserProvider | null {
+    return this.provider;
+  }
+
   clearBalanceCacheForAddress(address: string) {
     for (const key of this.balanceCache.keys()) {
-      if (key.startsWith(address)) {
-        this.balanceCache.delete(key);
+      if (key.startsWith(address)) this.balanceCache.delete(key);
+    }
+  }
+
+  clearAllBalanceCache() {
+    this.balanceCache.clear();
+  }
+
+  private setLocalStorage(key: string, value: string): void {
+    if (this.isBrowser && typeof localStorage !== 'undefined') {
+      try {
+        localStorage.setItem(key, value);
+      } catch (error) {
+        console.error('Error guardando en localStorage:', error);
       }
     }
   }
 
-  // Clear all balance cache
-  clearAllBalanceCache() {
-    this.balanceCache.clear();
+  private getLocalStorage(key: string): string | null {
+    if (this.isBrowser && typeof localStorage !== 'undefined') {
+      try {
+        return localStorage.getItem(key);
+      } catch (error) {
+        console.error('Error leyendo de localStorage:', error);
+        return null;
+      }
+    }
+    return null;
+  }
+
+  private removeLocalStorage(key: string): void {
+    if (this.isBrowser && typeof localStorage !== 'undefined') {
+      try {
+        localStorage.removeItem(key);
+      } catch (error) {
+        console.error('Error removiendo de localStorage:', error);
+      }
+    }
   }
 }

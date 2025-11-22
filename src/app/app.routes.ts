@@ -29,6 +29,13 @@ export const routes: Routes = [
     canActivate: [AuthGuard]
   },
   {
+    path: 'history',
+    title: 'Historial de Transacciones',
+    loadComponent: () =>
+      import('./dapp/components/pages/history/history.component').then(m => m.HistoryComponent),
+    canActivate: [AuthGuard]
+  },
+  {
     path: '**',
     redirectTo: '',
   },

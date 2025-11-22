@@ -1,8 +1,6 @@
 import { Injectable, Inject, PLATFORM_ID } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { CanActivate, ActivatedRouteSnapshot, RouterStateSnapshot, Router, UrlTree } from '@angular/router';
-import { Observable, from, of } from 'rxjs';
-import { catchError, map, timeout } from 'rxjs/operators';
 
 declare global {
   interface Window {
@@ -26,72 +24,28 @@ export class AuthGuard implements CanActivate {
   canActivate(
     route: ActivatedRouteSnapshot,
     state: RouterStateSnapshot
-  ): Observable<boolean | UrlTree> | Promise<boolean | UrlTree> | boolean | UrlTree {
-    
-    // Verificar si estamos en el cliente (navegador)
+  ): boolean | UrlTree {
+
+    // Validar que estamos en el navegador
     if (!this.isBrowser) {
-      return false;
-    }
-
-    // Verificar si hay wallet conectado
-    if (window.ethereum) {
-      try {
-        // Obtener cuentas conectadas con timeout
-        return from(this.checkWalletConnection()).pipe(
-          timeout(5000), // 5 second timeout
-          catchError((error) => {
-            console.error('Error en AuthGuard:', error);
-            return of(this.router.createUrlTree(['/login']));
-          })
-        );
-      } catch (error) {
-        console.error('Error en AuthGuard:', error);
-        return this.router.createUrlTree(['/login']);
-      }
-    } else {
-      console.warn('No hay wallet disponible');
       return this.router.createUrlTree(['/login']);
     }
-  }
 
-  private async checkWalletConnection(): Promise<boolean | UrlTree> {
-    try {
-      // Solicitar cuentas conectadas con timeout
-      const accountsPromise = window.ethereum.request({
-        method: 'eth_accounts',
-      });
-
-      // Add timeout to the promise
-      const accounts = await Promise.race([
-        accountsPromise,
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Timeout')), 5000)
-        )
-      ]);
-
-      // Si hay cuentas conectadas, permitir acceso
-      if (accounts && accounts.length > 0) {
-        console.log('Wallet verificado, acceso permitido');
-        // Also check if account is stored in localStorage
-        const storedAccount = localStorage.getItem('account');
-        if (storedAccount && accounts[0] === storedAccount) {
-          return true;
-        } else {
-          // Account mismatch, force logout
-          localStorage.removeItem('account');
-          return this.router.createUrlTree(['/login']);
-        }
-      } else {
-        console.warn('No hay cuentas conectadas');
-        // Clear stored account if no accounts connected
-        localStorage.removeItem('account');
-        return this.router.createUrlTree(['/login']);
-      }
-    } catch (error) {
-      console.error('Error verificando wallet:', error);
-      // Clear stored account on error
-      localStorage.removeItem('account');
+    // Si no existe MetaMask o proveedor Web3 → bloquear
+    if (!window.ethereum) {
+      console.warn('No hay wallet instalada');
       return this.router.createUrlTree(['/login']);
     }
+
+    // Leer dirección guardada
+    const savedAccount = localStorage.getItem('account');
+
+    // Si existe una cuenta guardada → permitir
+    if (savedAccount) {
+      return true;
+    }
+
+    // Si no hay cuenta → redirigir a login
+    return this.router.createUrlTree(['/login']);
   }
 }

@@ -1,6 +1,6 @@
 import { Injectable, Inject, PLATFORM_ID } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
-import { BehaviorSubject, Observable, Subject } from 'rxjs';
+import { BehaviorSubject, Subject } from 'rxjs';
 
 export interface Network {
   chainId: string;
@@ -9,13 +9,14 @@ export interface Network {
   decimals: number;
   explorer: string;
   apiUrl: string;
+  rpcUrls?: string[];
 }
 
 @Injectable({
   providedIn: 'root'
 })
 export class NetworkService {
-  // Redes soportadas
+  // Configuración completa de redes con chainId en hexadecimal
   private readonly networks: { [key: string]: Network } = {
     '0x1': {
       chainId: '0x1',
@@ -23,7 +24,8 @@ export class NetworkService {
       symbol: 'ETH',
       decimals: 18,
       explorer: 'https://etherscan.io',
-      apiUrl: 'https://api.etherscan.io/api'
+      apiUrl: 'https://api.etherscan.io/api',
+      rpcUrls: ['https://cloudflare-eth.com', 'https://eth.llamarpc.com']
     },
     '0xaa36a7': {
       chainId: '0xaa36a7',
@@ -31,7 +33,8 @@ export class NetworkService {
       symbol: 'ETH',
       decimals: 18,
       explorer: 'https://sepolia.etherscan.io',
-      apiUrl: 'https://api-sepolia.etherscan.io/api'
+      apiUrl: 'https://api-sepolia.etherscan.io/api',
+      rpcUrls: ['https://rpc.sepolia.org', 'https://rpc2.sepolia.org']
     },
     '0x4268': {
       chainId: '0x4268',
@@ -39,33 +42,46 @@ export class NetworkService {
       symbol: 'ETH',
       decimals: 18,
       explorer: 'https://holesky.etherscan.io',
-      apiUrl: 'https://api-holesky.etherscan.io/api'
+      apiUrl: 'https://api-holesky.etherscan.io/api',
+      rpcUrls: ['https://holesky.drpc.org', 'https://1rpc.io/holesky']
+    },
+    '0x89': {
+      chainId: '0x89',
+      name: 'Polygon Mainnet',
+      symbol: 'MATIC',
+      decimals: 18,
+      explorer: 'https://polygonscan.com',
+      apiUrl: 'https://api.polygonscan.com/api',
+      rpcUrls: ['https://polygon-rpc.com', 'https://polygon.llamarpc.com']
+    },
+    '0x13881': {
+      chainId: '0x13881',
+      name: 'Mumbai Testnet',
+      symbol: 'MATIC',
+      decimals: 18,
+      explorer: 'https://mumbai.polygonscan.com',
+      apiUrl: 'https://api-testnet.polygonscan.com/api',
+      rpcUrls: ['https://rpc-mumbai.maticvigil.com', 'https://endpoints.omniatech.io/v1/matic/mumbai/public']
     }
   };
 
-  // BehaviorSubject para mantener el estado actual de la red
   private currentNetworkSubject = new BehaviorSubject<Network | null>(null);
   public currentNetwork$ = this.currentNetworkSubject.asObservable();
 
-  // Subject for handling chain changes globally
   private chainChangedSubject = new Subject<string>();
   public chainChanged$ = this.chainChangedSubject.asObservable();
-  private isBrowser: boolean;
   
-  // Store the chainChanged handler to properly remove it later
+  private isBrowser: boolean;
   private chainChangedHandler: ((chainId: string) => void) | null = null;
 
   constructor(@Inject(PLATFORM_ID) private platformId: Object) {
     this.isBrowser = isPlatformBrowser(platformId);
-    // Inicializar con la red por defecto si es necesario
     this.initializeNetwork();
   }
 
-  // Inicializar la red desde localStorage o con una red por defecto
   private initializeNetwork() {
-    // Only run in browser environment
     if (!this.isBrowser) {
-      // Fallback to default network if not in browser
+      // Default a Ethereum Mainnet en SSR
       this.setCurrentNetwork(this.networks['0x1']);
       return;
     }
@@ -73,136 +89,135 @@ export class NetworkService {
     if ((window as any).ethereum) {
       (window as any).ethereum.request({ method: 'eth_chainId' })
         .then((chainId: string) => {
-          const network = this.networks[chainId] || this.networks['0x1']; // Default to Mainnet
+          console.log(`🔗 ChainId detectado: ${chainId} (${this.hexToDecimal(chainId)})`);
+          const network = this.networks[chainId] || this.networks['0x1'];
           this.setCurrentNetwork(network);
         })
         .catch((error: any) => {
-          console.error('Error getting chainId:', error);
-          // Fallback to default network
+          console.error('❌ Error obteniendo chainId:', error);
           this.setCurrentNetwork(this.networks['0x1']);
         });
     } else {
-      // Fallback to default network if no ethereum provider
+      console.warn('⚠️ MetaMask no detectado, usando red por defecto');
       this.setCurrentNetwork(this.networks['0x1']);
     }
   }
 
-  // Establecer la red actual
   setCurrentNetwork(network: Network) {
+    console.log(`✅ Red establecida: ${network.name} (${network.chainId})`);
     this.currentNetworkSubject.next(network);
-    // Guardar en localStorage para persistencia
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem('selectedNetwork', JSON.stringify(network));
-    }
+    this.setLocalStorage('selectedNetwork', JSON.stringify(network));
   }
 
-  // Obtener la red actual
   getCurrentNetwork(): Network | null {
     return this.currentNetworkSubject.value;
   }
 
-  // Obtener todas las redes soportadas
   getSupportedNetworks(): Network[] {
     return Object.values(this.networks);
   }
 
-  // Obtener una red por chainId
   getNetworkByChainId(chainId: string): Network | undefined {
     return this.networks[chainId];
   }
 
-  // Cambiar la red usando MetaMask
+  // Obtener red por chainId decimal (1, 11155111, 17000, etc.)
+  getNetworkByChainIdDecimal(chainIdDecimal: number): Network | undefined {
+    const chainIdHex = this.decimalToHex(chainIdDecimal);
+    return this.networks[chainIdHex];
+  }
+
   async switchNetwork(chainId: string): Promise<boolean> {
-    // Only run in browser environment
     if (!this.isBrowser) {
+      console.warn('⚠️ No se puede cambiar de red en SSR');
       return false;
     }
     
-    if ((window as any).ethereum) {
-      try {
-        // Primero intentar cambiar a la red
-        await (window as any).ethereum.request({
-          method: 'wallet_switchEthereumChain',
-          params: [{ chainId }],
-        });
-        
-        // Si tiene éxito, actualizar el estado
-        const network = this.networks[chainId];
-        if (network) {
-          this.setCurrentNetwork(network);
-          // Emit chain change event
-          this.chainChangedSubject.next(chainId);
-        }
-        
-        return true;
-      } catch (switchError: any) {
-        // Este error code indica que la cadena no ha sido añadida a MetaMask
-        if (switchError.code === 4902) {
-          try {
-            // Intentar añadir la red si no está disponible
-            await this.addNetworkToMetaMask(chainId);
-            return true;
-          } catch (addError) {
-            console.error('Error adding chain to MetaMask:', addError);
-          }
-        }
-        console.error('Error switching network:', switchError);
-        return false;
-      }
+    if (!(window as any).ethereum) {
+      console.error('❌ MetaMask no disponible');
+      return false;
     }
-    return false;
+    
+    try {
+      console.log(`🔄 Cambiando a red: ${chainId}`);
+      
+      await (window as any).ethereum.request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId }],
+      });
+      
+      const network = this.networks[chainId];
+      if (network) {
+        this.setCurrentNetwork(network);
+        this.chainChangedSubject.next(chainId);
+      }
+      
+      console.log('✅ Red cambiada exitosamente');
+      return true;
+    } catch (switchError: any) {
+      if (switchError.code === 4902) {
+        console.log('➕ Red no encontrada en MetaMask, intentando agregar...');
+        try {
+          await this.addNetworkToMetaMask(chainId);
+          console.log('✅ Red agregada exitosamente');
+          return true;
+        } catch (addError) {
+          console.error('❌ Error agregando red a MetaMask:', addError);
+          return false;
+        }
+      }
+      console.error('❌ Error cambiando de red:', switchError);
+      return false;
+    }
   }
 
-  // Método para añadir una red a MetaMask
   private async addNetworkToMetaMask(chainId: string): Promise<void> {
     const network = this.networks[chainId];
     if (!network) {
-      throw new Error('Network not supported');
+      throw new Error(`Red ${chainId} no soportada`);
     }
+
+    const params = {
+      chainId: network.chainId,
+      chainName: network.name,
+      nativeCurrency: {
+        name: network.symbol,
+        symbol: network.symbol,
+        decimals: network.decimals,
+      },
+      rpcUrls: network.rpcUrls || [network.apiUrl.replace('/api', '')],
+      blockExplorerUrls: [network.explorer]
+    };
+
+    console.log('📤 Agregando red con parámetros:', params);
 
     await (window as any).ethereum.request({
       method: 'wallet_addEthereumChain',
-      params: [{
-        chainId: network.chainId,
-        chainName: network.name,
-        rpcUrls: [network.apiUrl.replace('/api', '')], // Remove /api from URL for RPC
-        blockExplorerUrls: [network.explorer],
-        nativeCurrency: {
-          name: network.name,
-          symbol: network.symbol,
-          decimals: network.decimals,
-        },
-      }],
+      params: [params],
     });
   }
 
-  // Escuchar cambios de red en MetaMask
   listenToNetworkChanges() {
-    // Only run in browser environment
     if (!this.isBrowser) {
       return;
     }
     
     if ((window as any).ethereum) {
-      // Remove existing listeners to prevent duplicates
       this.removeNetworkListener();
       
-      // Create and store the handler function
       this.chainChangedHandler = (chainId: string) => {
-        const network = this.networks[chainId] || this.networks['0x1']; // Default to Mainnet
+        console.log(`🔔 Red cambiada a: ${chainId} (${this.hexToDecimal(chainId)})`);
+        const network = this.networks[chainId] || this.networks['0x1'];
         this.setCurrentNetwork(network);
-        // Emit chain change event
         this.chainChangedSubject.next(chainId);
       };
       
-      // Add new listener
       (window as any).ethereum.on('chainChanged', this.chainChangedHandler);
+      console.log('👂 Escuchando cambios de red');
     }
   }
 
-  // Dejar de escuchar cambios de red
   removeNetworkListener() {
-    // Only run in browser environment
     if (!this.isBrowser) {
       return;
     }
@@ -210,6 +225,60 @@ export class NetworkService {
     if ((window as any).ethereum && this.chainChangedHandler) {
       (window as any).ethereum.removeListener('chainChanged', this.chainChangedHandler);
       this.chainChangedHandler = null;
+      console.log('🔇 Dejó de escuchar cambios de red');
     }
+  }
+
+  // ===== UTILIDADES =====
+
+  // Convertir chainId decimal a hexadecimal
+  private decimalToHex(decimal: number): string {
+    return '0x' + decimal.toString(16);
+  }
+
+  // Convertir chainId hexadecimal a decimal
+  private hexToDecimal(hex: string): number {
+    return parseInt(hex, 16);
+  }
+
+  // Verificar si es una testnet
+  isTestnet(chainId?: string): boolean {
+    const network = chainId ? this.networks[chainId] : this.currentNetworkSubject.value;
+    if (!network) return false;
+    
+    const testnets = ['Sepolia', 'Holesky', 'Mumbai', 'Goerli'];
+    return testnets.some(testnet => network.name.includes(testnet));
+  }
+
+  // Obtener información formateada de la red actual
+  getCurrentNetworkInfo(): string {
+    const network = this.currentNetworkSubject.value;
+    if (!network) return 'No conectado';
+    
+    return `${network.name} (${network.symbol})`;
+  }
+
+  // ===== MÉTODOS AUXILIARES PARA localStorage CON SSR =====
+  
+  private setLocalStorage(key: string, value: string): void {
+    if (this.isBrowser && typeof localStorage !== 'undefined') {
+      try {
+        localStorage.setItem(key, value);
+      } catch (error) {
+        console.error('Error guardando en localStorage:', error);
+      }
+    }
+  }
+
+  private getLocalStorage(key: string): string | null {
+    if (this.isBrowser && typeof localStorage !== 'undefined') {
+      try {
+        return localStorage.getItem(key);
+      } catch (error) {
+        console.error('Error leyendo de localStorage:', error);
+        return null;
+      }
+    }
+    return null;
   }
 }

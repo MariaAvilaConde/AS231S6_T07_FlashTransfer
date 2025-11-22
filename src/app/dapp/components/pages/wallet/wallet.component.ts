@@ -39,19 +39,19 @@ export class WalletComponent implements OnInit, OnDestroy {
   chainId = '';
   private isBrowser: boolean;
 
-  // Configuración de redes soportadas
+  // Configuración de redes soportadas - URLS SIN CORS
   supportedNetworks: { [key: string]: NetworkConfig } = {
     '0x1': {
       chainId: '0x1',
       name: 'Ethereum Mainnet',
-      rpcUrl: 'https://eth-mainnet.g.alchemy.com/v2/demo',
+      rpcUrl: 'https://cloudflare-eth.com',
       explorer: 'https://etherscan.io',
       nativeCurrency: 'ETH'
     },
     '0xaa36a7': {
       chainId: '0xaa36a7',
       name: 'Sepolia Testnet',
-      rpcUrl: 'https://sepolia.infura.io',
+      rpcUrl: 'https://rpc.sepolia.org',
       explorer: 'https://sepolia.etherscan.io',
       nativeCurrency: 'ETH'
     },
@@ -296,10 +296,7 @@ export class WalletComponent implements OnInit, OnDestroy {
   }
 
   private async loadBalances(chainId: string) {
-    // Only run in browser environment
-    if (!this.isBrowser) {
-      return;
-    }
+    if (!this.isBrowser) return;
     
     const networkConfig = this.supportedNetworks[chainId];
     if (!networkConfig) {
@@ -309,10 +306,9 @@ export class WalletComponent implements OnInit, OnDestroy {
     }
 
     try {
-      // Obtener balance nativo (ETH, MATIC, etc.) usando el servicio con cache
+      // Obtener balance nativo (ETH, MATIC, etc.)
       const nativeBalanceFormatted = await this.walletService.getBalance(this.walletAddress, chainId);
       
-      // Actualizar balance nativo
       const nativeToken = this.tokenBalances.find(token => 
         token.symbol === networkConfig.nativeCurrency
       );
@@ -321,14 +317,17 @@ export class WalletComponent implements OnInit, OnDestroy {
         nativeToken.balance = parseFloat(nativeBalanceFormatted).toFixed(4);
         this.ethBalance = nativeToken.balance;
         
-        // Obtener precio en USD (usando una API)
         const usdValue = await this.getTokenUSDValue(networkConfig.nativeCurrency, nativeBalanceFormatted);
         nativeToken.usdValue = usdValue;
         this.usdBalance = usdValue;
       }
 
-      // Obtener balances de tokens ERC-20
-      await this.loadERC20Balances(new ethers.JsonRpcProvider(networkConfig.rpcUrl));
+      // ⚠️ TOKENS ERC-20 DESHABILITADOS EN CODESPACES
+      // GitHub Codespaces bloquea todas las conexiones RPC por CORS
+      // Descomentar esta línea cuando trabajes en local o producción:
+      // await this.loadERC20Balances();
+      
+      console.log('ℹ️ Balances de tokens ERC-20 deshabilitados (limitación de Codespaces)');
 
     } catch (error: any) {
       console.error('Error loading balances:', error);
@@ -336,38 +335,41 @@ export class WalletComponent implements OnInit, OnDestroy {
     }
   }
 
-  private async loadERC20Balances(provider: ethers.JsonRpcProvider) {
-    // Process tokens in batches to avoid overwhelming the network
+  private async loadERC20Balances() {
     const batchSize = 3;
     for (let i = 0; i < this.tokenBalances.length; i += batchSize) {
       const batch = this.tokenBalances.slice(i, i + batchSize);
       const promises = batch
         .filter(token => token.contractAddress)
-        .map(token => this.fetchTokenBalance(token, provider));
+        .map(token => this.fetchTokenBalance(token));
       
       await Promise.all(promises);
     }
   }
 
-  private async fetchTokenBalance(token: TokenBalance, provider: ethers.JsonRpcProvider) {
-    // Only run in browser environment
-    if (!this.isBrowser) {
-      return;
-    }
+  private async fetchTokenBalance(token: TokenBalance) {
+    if (!this.isBrowser) return;
     
     try {
-      // ABI mínima para balanceOf
+      const provider = this.walletService.getProvider();
+      if (!provider) throw new Error('Provider no disponible');
+      
       const abi = ['function balanceOf(address) view returns (uint256)'];
       const contract = new ethers.Contract(token.contractAddress!, abi, provider);
       
-      const balance = await contract['balanceOf'](this.walletAddress);
-      const formattedBalance = ethers.formatUnits(balance, token.decimals);
-      
-      token.balance = parseFloat(formattedBalance).toFixed(4);
-      
-      // Obtener valor en USD
-      const usdValue = await this.getTokenUSDValue(token.symbol, formattedBalance);
-      token.usdValue = usdValue;
+      try {
+        const balance = await contract['balanceOf'](this.walletAddress);
+        const formattedBalance = ethers.formatUnits(balance, token.decimals);
+        
+        token.balance = parseFloat(formattedBalance).toFixed(4);
+        
+        const usdValue = await this.getTokenUSDValue(token.symbol, formattedBalance);
+        token.usdValue = usdValue;
+      } catch (balanceError: any) {
+        console.warn(`⚠️ No se pudo obtener balance de ${token.symbol}`);
+        token.balance = '0.00';
+        token.usdValue = '0.00';
+      }
       
     } catch (error: any) {
       console.error(`Error loading balance for ${token.symbol}:`, error);

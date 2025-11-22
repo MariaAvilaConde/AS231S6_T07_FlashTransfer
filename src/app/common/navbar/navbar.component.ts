@@ -13,47 +13,72 @@ import { NetworkSwitcherComponent } from '../../dapp/components/network-switcher
   styleUrl: './navbar.component.css'
 })
 export class NavbarComponent implements OnInit {
+
   menuAbierto: boolean = false;
-  menuOpen = false;
-  userMenuOpen = false;
+  userMenuOpen: boolean = false;
+
   address: string = '';
   shortened: string = '';
   avatarUrl: string = '';
+
   private isBrowser: boolean;
 
   constructor(
     private walletService: WalletService,
     private router: Router,
     @Inject(PLATFORM_ID) private platformId: Object
-  ) { 
+  ) {
     this.isBrowser = isPlatformBrowser(platformId);
   }
 
   ngOnInit(): void {
-    const acc = this.walletService.getAccount() ?? '';
-    this.address = acc;
-    this.shortened = acc ? this.shortenAddress(acc) : '';
-    this.avatarUrl = acc ? `https://api.dicebear.com/7.x/identicon/svg?seed=${acc}` : '';
+    if (!this.isBrowser) return;
+
+    // Obtener la wallet almacenada
+    const acc = this.walletService.getAccount();
+
+    if (acc) {
+      this.setAddress(acc);
+    }
   }
 
-  copiarUsuario(texto: string) {
-    // Only run in browser environment
-    if (!this.isBrowser) {
-      return;
+  /** =============================
+   *  MÉTODO: CONECTAR WALLET
+   *  ============================= */
+  async conectarWallet(): Promise<void> {
+    try {
+      const acc = await this.walletService.connectWallet();
+
+      if (acc) {
+        this.setAddress(acc);
+      }
+    } catch (error) {
+      console.error('Error al conectar wallet:', error);
     }
-    
-    if (!texto) return;
-    navigator.clipboard.writeText(texto).then(() => {
-    }, err => {
+  }
+
+  /** =============================
+   *  ACTUALIZA address, shortened y avatar
+   *  ============================= */
+  private setAddress(acc: string): void {
+    this.address = acc;
+    this.shortened = this.shortenAddress(acc);
+    this.avatarUrl = `https://api.dicebear.com/7.x/identicon/svg?seed=${acc}`;
+  }
+
+  copiarUsuario(texto: string): void {
+    if (!this.isBrowser || !texto) return;
+
+    navigator.clipboard.writeText(texto).catch(err => {
       console.error('Error al copiar', err);
     });
   }
 
-  toggleMenuAbierto() {
+  toggleMenuAbierto(): void {
     this.menuAbierto = !this.menuAbierto;
   }
 
-  toggleUserMenu() {
+  toggleUserMenu(): void {
     this.userMenuOpen = !this.userMenuOpen;
   }
 
@@ -65,8 +90,7 @@ export class NavbarComponent implements OnInit {
     this.walletService.logout();
     this.address = '';
     this.shortened = '';
-    this.avatarUrl = '';
+       this.avatarUrl = '';
     this.router.navigate(['/login']);
   }
-
 }

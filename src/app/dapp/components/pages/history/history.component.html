@@ -1,0 +1,270 @@
+<div class="max-w-7xl mx-auto">
+  <!-- Header -->
+  <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+    <div class="flex items-center justify-between mb-4">
+      <div>
+        <h1 class="text-3xl font-bold text-gray-800">Historial de Transacciones</h1>
+        <div class="flex items-center gap-3 mt-2">
+          <p class="text-gray-600">{{ address ? shortenAddress(address) : 'No conectado' }}</p>
+          <span class="text-gray-400">•</span>
+          <!-- Badge de red mejorado -->
+          <span 
+            class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium"
+            [class.bg-green-100]="!isTestnet()"
+            [class.text-green-800]="!isTestnet()"
+            [class.bg-yellow-100]="isTestnet()"
+            [class.text-yellow-800]="isTestnet()">
+            <span class="w-2 h-2 rounded-full mr-2"
+              [class.bg-green-500]="!isTestnet()"
+              [class.bg-yellow-500]="isTestnet()">
+            </span>
+            {{ getNetworkDisplayName() }}
+          </span>
+        </div>
+      </div>
+      
+      <button 
+        (click)="refresh()" 
+        [disabled]="loading"
+        class="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition disabled:opacity-50 disabled:cursor-not-allowed">
+        <svg class="h-5 w-5" [class.animate-spin]="loading" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+        </svg>
+        <span>Actualizar</span>
+      </button>
+    </div>
+
+    <!-- Info de red actual -->
+    <div class="bg-gray-50 rounded-lg p-3 mb-4">
+      <p class="text-sm text-gray-600">
+        <svg class="inline-block h-4 w-4 mr-1 text-teal-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        Mostrando transacciones de <strong>{{ getNetworkDisplayName() }}</strong>. 
+        Cambia de red en MetaMask para ver transacciones de otras redes.
+      </p>
+    </div>
+
+    <!-- Filtros y búsqueda -->
+    <div class="flex flex-col md:flex-row gap-4">
+      <!-- Búsqueda -->
+      <div class="flex-1">
+        <div class="relative">
+          <input 
+            type="text" 
+            [(ngModel)]="searchTerm"
+            (ngModelChange)="applyFilters()"
+            placeholder="Buscar por hash, dirección o token..."
+            class="w-full px-4 py-2 pl-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent">
+          <svg class="absolute left-3 top-3 h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+        </div>
+      </div>
+
+      <!-- Filtro por tipo -->
+      <div class="flex gap-2 flex-wrap">
+        <button 
+          (click)="filterType = 'all'; applyFilters()"
+          [class.bg-teal-600]="filterType === 'all'"
+          [class.text-white]="filterType === 'all'"
+          [class.bg-gray-200]="filterType !== 'all'"
+          [class.text-gray-700]="filterType !== 'all'"
+          class="px-4 py-2 rounded-lg font-medium transition">
+          Todas
+        </button>
+        <button 
+          (click)="filterType = 'sent'; applyFilters()"
+          [class.bg-teal-600]="filterType === 'sent'"
+          [class.text-white]="filterType === 'sent'"
+          [class.bg-gray-200]="filterType !== 'sent'"
+          [class.text-gray-700]="filterType !== 'sent'"
+          class="px-4 py-2 rounded-lg font-medium transition">
+          Enviadas
+        </button>
+        <button 
+          (click)="filterType = 'received'; applyFilters()"
+          [class.bg-teal-600]="filterType === 'received'"
+          [class.text-white]="filterType === 'received'"
+          [class.bg-gray-200]="filterType !== 'received'"
+          [class.text-gray-700]="filterType !== 'received'"
+          class="px-4 py-2 rounded-lg font-medium transition">
+          Recibidas
+        </button>
+        <button 
+          (click)="filterType = 'token'; applyFilters()"
+          [class.bg-teal-600]="filterType === 'token'"
+          [class.text-white]="filterType === 'token'"
+          [class.bg-gray-200]="filterType !== 'token'"
+          [class.text-gray-700]="filterType !== 'token'"
+          class="px-4 py-2 rounded-lg font-medium transition">
+          Tokens
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Loading -->
+  <div *ngIf="loading" class="bg-white rounded-lg shadow-md p-12 text-center">
+    <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-teal-600"></div>
+    <p class="mt-4 text-gray-600">Cargando transacciones de {{ getNetworkDisplayName() }}...</p>
+  </div>
+
+  <!-- Error -->
+  <div *ngIf="error && !loading" class="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+    <div class="flex items-center gap-2 text-red-800">
+      <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+              d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+      <span>{{ error }}</span>
+    </div>
+  </div>
+
+  <!-- Lista de transacciones -->
+  <div *ngIf="!loading && !error" class="bg-white rounded-lg shadow-md overflow-hidden">
+    <!-- Sin transacciones -->
+    <div *ngIf="filteredTransactions.length === 0" class="p-12 text-center">
+      <svg class="h-16 w-16 text-gray-400 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      </svg>
+      <p class="text-gray-600 text-lg">No hay transacciones en {{ getNetworkDisplayName() }}</p>
+      <p class="text-gray-400 text-sm mt-2">
+        {{ isTestnet() ? 'Realiza tu primera transacción en esta testnet' : 'Realiza tu primera transacción o cambia de red' }}
+      </p>
+    </div>
+
+    <!-- Tabla de transacciones -->
+    <div *ngIf="filteredTransactions.length > 0">
+      <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hash</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">De / Para</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cantidad</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
+            </tr>
+          </thead>
+          <tbody class="bg-white divide-y divide-gray-200">
+            <tr *ngFor="let tx of getPaginatedTransactions()" class="hover:bg-gray-50 transition">
+              <!-- Estado -->
+              <td class="px-6 py-4 whitespace-nowrap">
+                <div class="flex items-center">
+                  <div [class]="getTransactionColor(tx)" class="flex items-center gap-2">
+                    <svg *ngIf="getTransactionIcon(tx) === 'arrow-up'" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                    </svg>
+                    <svg *ngIf="getTransactionIcon(tx) === 'arrow-down'" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                    </svg>
+                    <span class="font-medium text-sm">{{ getTransactionType(tx) }}</span>
+                  </div>
+                </div>
+              </td>
+
+              <!-- Hash -->
+              <td class="px-6 py-4 whitespace-nowrap">
+                <div class="flex items-center gap-2">
+                  <code class="text-sm text-gray-600 font-mono">{{ shortenHash(tx.hash) }}</code>
+                  <button 
+                    (click)="copyToClipboard(tx.hash)"
+                    class="text-gray-400 hover:text-gray-600 transition"
+                    title="Copiar hash">
+                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                            d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                  </button>
+                </div>
+              </td>
+
+              <!-- De / Para -->
+              <td class="px-6 py-4">
+                <div class="text-sm">
+                  <div class="text-gray-500">De: <span class="text-gray-700 font-mono">{{ shortenAddress(tx.from) }}</span></div>
+                  <div class="text-gray-500">Para: <span class="text-gray-700 font-mono">{{ shortenAddress(tx.to) }}</span></div>
+                </div>
+              </td>
+
+              <!-- Cantidad -->
+              <td class="px-6 py-4 whitespace-nowrap">
+                <div class="text-sm font-medium text-gray-900">
+                  {{ tx.amount | number:'1.0-6' }}
+                  <span class="text-gray-500 ml-1">{{ tx.isToken ? tx.tokenSymbol : getNetworkSymbol() }}</span>
+                </div>
+                <div *ngIf="tx.isToken" class="text-xs text-gray-500">{{ tx.tokenName }}</div>
+              </td>
+
+              <!-- Fecha -->
+              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                {{ formatDate(tx.timestamp) }}
+              </td>
+
+              <!-- Acciones -->
+              <td class="px-6 py-4 whitespace-nowrap text-sm">
+                <button 
+                  (click)="openInExplorer(tx)"
+                  class="text-teal-600 hover:text-teal-800 font-medium flex items-center gap-1">
+                  Ver detalles
+                  <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                          d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Paginación -->
+      <div class="bg-gray-50 px-6 py-4 border-t border-gray-200">
+        <div class="flex items-center justify-between flex-wrap gap-4">
+          <div class="text-sm text-gray-700">
+            Mostrando 
+            <span class="font-medium">{{ (currentPage - 1) * itemsPerPage + 1 }}</span>
+            -
+            <span class="font-medium">{{ Math.min(currentPage * itemsPerPage, filteredTransactions.length) }}</span>
+            de
+            <span class="font-medium">{{ filteredTransactions.length }}</span>
+            transacciones
+          </div>
+
+          <div class="flex gap-2">
+            <button 
+              (click)="prevPage()"
+              [disabled]="currentPage === 1"
+              class="px-3 py-1 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
+              Anterior
+            </button>
+
+            <button 
+              *ngFor="let page of getPageNumbers()"
+              (click)="goToPage(page)"
+              [class.bg-teal-600]="page === currentPage"
+              [class.text-white]="page === currentPage"
+              [class.text-gray-700]="page !== currentPage"
+              [class.hover:bg-gray-50]="page !== currentPage"
+              class="px-3 py-1 border border-gray-300 rounded-md text-sm font-medium">
+              {{ page }}
+            </button>
+
+            <button 
+              (click)="nextPage()"
+              [disabled]="currentPage === totalPages"
+              class="px-3 py-1 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
+              Siguiente
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
