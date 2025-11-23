@@ -52,18 +52,89 @@
         </p>
       </section>
 
-      <!-- Balance Card -->
-      <div class="balance-card">
-        <div class="balance-label">Balance Disponible</div>
-        <div class="balance-amount">
-          {{ balance }} <span class="balance-symbol">{{ currentNetwork?.symbol }}</span>
+      <!-- Balance Cards Row -->
+      <div class="balance-cards-row">
+        <!-- Wallet Balance Card -->
+        <div class="balance-card">
+          <div class="balance-label">💼 Balance Wallet</div>
+          <div class="balance-amount">
+            {{ balance }} <span class="balance-symbol">{{ currentNetwork?.symbol }}</span>
+          </div>
+          <div class="balance-network">Red: {{ currentNetwork?.name }}</div>
         </div>
-        <div class="balance-network">Red: {{ currentNetwork?.name }}</div>
+
+        <!-- Contract Balance Card -->
+        <div class="balance-card contract-card" *ngIf="isContractInitialized">
+          <div class="balance-label">📜 Balance Contrato</div>
+          <div class="balance-amount">
+            {{ contractBalance }} <span class="balance-symbol">{{ currentNetwork?.symbol }}</span>
+          </div>
+          <div class="balance-network">
+            {{ formatAddress(contractAddress) }}
+            <button class="btn-copy-inline" (click)="copyToClipboard(contractAddress, 'Dirección del contrato')" title="Copiar dirección">
+              📋
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Contract Setup Section -->
+      <div class="contract-setup" *ngIf="!isContractInitialized">
+        <h2 class="section-title">📜 Configurar Contrato Inteligente</h2>
+        <div class="contract-form">
+          <div class="form-group">
+            <label for="contractAddress">Dirección del Contrato</label>
+            <div class="input-wrapper">
+              <input
+                type="text"
+                id="contractAddress"
+                [(ngModel)]="contractAddress"
+                placeholder="0x..."
+                class="form-input"
+              />
+              <button 
+                class="btn-primary-inline" 
+                (click)="initializeContract()"
+                [disabled]="!contractAddress"
+              >
+                Inicializar
+              </button>
+            </div>
+            <small class="input-hint">Ingresa la dirección de tu contrato inteligente para habilitar transacciones de contrato</small>
+          </div>
+        </div>
+      </div>
+
+      <!-- Transaction Mode Toggle -->
+      <div class="transaction-mode-toggle" *ngIf="isContractInitialized">
+        <button 
+          class="mode-btn" 
+          [class.active]="!useContract"
+          (click)="useContract = false"
+        >
+          💸 Transacción Directa
+        </button>
+        <button 
+          class="mode-btn" 
+          [class.active]="useContract"
+          (click)="useContract = true"
+        >
+          📜 Usar Contrato
+        </button>
+        <button 
+          class="btn-clear-contract" 
+          (click)="clearContract()"
+          title="Limpiar contrato"
+        >
+          🗑️
+        </button>
       </div>
 
       <!-- Transaction Form -->
       <div class="transaction-form">
-        <h2 class="form-title">Nueva Transferencia</h2>
+        <h2 class="form-title">
+          {{ useContract ? '📜 Transacción de Contrato' : '💸 Nueva Transferencia' }}
+        </h2>
         
         <div class="form-group">
           <label for="recipient">Dirección del Destinatario</label>
@@ -99,7 +170,7 @@
               placeholder="0.0"
               step="0.000001"
               min="0"
-              [max]="balance"
+              [max]="useContract ? contractBalance : balance"
               [disabled]="isSending"
               class="form-input"
               (input)="onAmountInput($any($event))"
@@ -114,7 +185,10 @@
             </button>
             <span class="input-suffix">{{ currentNetwork?.symbol }}</span>
           </div>
-          <small class="input-hint">Disponible: {{ balance }} {{ currentNetwork?.symbol }}</small>
+          <small class="input-hint">
+            Disponible: {{ useContract ? contractBalance : balance }} {{ currentNetwork?.symbol }}
+            <span *ngIf="useContract"> (del contrato)</span>
+          </small>
         </div>
 
         <!-- Gas Fee Estimation -->
@@ -123,17 +197,35 @@
           <div class="gas-amount">{{ gasEstimate }} {{ currentNetwork?.symbol }}</div>
         </div>
 
-        <button
-          class="btn-send"
-          (click)="sendTransaction()"
-          [disabled]="isSending || !recipientAddress || !amount || !isValidAddress(recipientAddress)"
-          [class.loading]="isSending"
-        >
-          <span *ngIf="!isSending">💸 Enviar Transferencia</span>
-          <span *ngIf="isSending">
-            <span class="spinner"></span> Procesando...
-          </span>
-        </button>
+        <!-- Action Buttons -->
+        <div class="action-buttons">
+          <button
+            class="btn-send"
+            (click)="sendTransaction()"
+            [disabled]="isSending || !recipientAddress || !amount || !isValidAddress(recipientAddress)"
+            [class.loading]="isSending"
+          >
+            <span *ngIf="!isSending">
+              {{ useContract ? '📜 Enviar vía Contrato' : '💸 Enviar Transferencia' }}
+            </span>
+            <span *ngIf="isSending">
+              <span class="spinner"></span> Procesando...
+            </span>
+          </button>
+
+          <button
+            class="btn-deposit"
+            (click)="depositToContract()"
+            *ngIf="isContractInitialized && !useContract"
+            [disabled]="isSending || !isValidAmount()"
+            [class.loading]="isSending"
+          >
+            <span *ngIf="!isSending">💰 Depositar al Contrato</span>
+            <span *ngIf="isSending">
+              <span class="spinner"></span> Procesando...
+            </span>
+          </button>
+        </div>
 
         <div class="form-info">
           <div class="info-item">
@@ -143,6 +235,10 @@
           <div class="info-item">
             <span class="info-label">🔒 Red:</span>
             <span class="info-value">{{ currentNetwork?.name }}</span>
+          </div>
+          <div class="info-item" *ngIf="useContract">
+            <span class="info-label">📜 Modo:</span>
+            <span class="info-value">Contrato</span>
           </div>
         </div>
       </div>
@@ -167,14 +263,14 @@
               *ngIf="transactions.length > 0"
               title="Respaldar transacciones"
             >
-              💾 Respaldar
+              💾
             </button>
             <button 
               class="btn-clear-history" 
               (click)="clearTransactionHistory()"
               *ngIf="transactions.length > 0"
             >
-              🗑️ Limpiar
+              🗑️
             </button>
           </div>
         </div>
@@ -192,14 +288,20 @@
             [class.pending]="tx.status === 'pending'"
             [class.success]="tx.status === 'success'"
             [class.failed]="tx.status === 'failed'"
+            [class.contract-tx]="tx.isContractTransaction"
           >
             <div class="tx-icon">
               <span *ngIf="tx.status === 'pending'" class="pulse">⏳</span>
-              <span *ngIf="tx.status === 'success'">✅</span>
+              <span *ngIf="tx.status === 'success' && !tx.isContractTransaction">✅</span>
+              <span *ngIf="tx.status === 'success' && tx.isContractTransaction">📜</span>
               <span *ngIf="tx.status === 'failed'">❌</span>
             </div>
 
             <div class="tx-details">
+              <div class="tx-type" *ngIf="tx.isContractTransaction">
+                <span class="contract-badge">📜 Transacción de Contrato</span>
+              </div>
+
               <div class="tx-addresses">
                 <span class="tx-label">De:</span>
                 <span class="tx-address" (click)="copyToClipboard(tx.from, 'Dirección remitente')">
@@ -226,14 +328,13 @@
               </div>
 
               <div class="tx-explorer" *ngIf="getExplorerUrl(tx)">
-                <span class="tx-explorer-label">Explorer:</span>
                 <a 
                   class="tx-explorer-link" 
                   [href]="getExplorerUrl(tx)" 
                   target="_blank"
                   (click)="$event.stopPropagation()"
                 >
-                  Ver en Block Explorer
+                  🔍 Ver en Block Explorer
                 </a>
               </div>
 
@@ -251,7 +352,7 @@
                   *ngIf="getExplorerUrl(tx)"
                   title="Ver en explorador de bloques"
                 >
-                  🔍 Ver en Explorer
+                  🔍 Explorer
                 </button>
                 <button 
                   class="btn-action" 

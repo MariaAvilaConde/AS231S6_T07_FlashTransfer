@@ -2,11 +2,12 @@ import { Component, OnInit, OnDestroy, Inject, PLATFORM_ID } from '@angular/core
 import { CommonModule, isPlatformBrowser } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
-import { HttpClient, HttpParams } from '@angular/common/http';
-import { catchError, of, Subscription, Subject, debounceTime, distinctUntilChanged, switchMap, takeUntil } from 'rxjs';
+import { HttpClient } from '@angular/common/http';
+import { Subscription, Subject, debounceTime, takeUntil } from 'rxjs';
 import { WalletService } from '../../../service/wallet.service';
 import { EtherscanService, EtherscanTransaction } from '../../../service/etherscan.service';
 import { NetworkService, Network as NetworkModel } from '../../../service/network.service';
+import { ContractService } from '../../../service/contract.service';
 
 interface Transaction {
   hash: string;
@@ -20,6 +21,7 @@ interface Transaction {
   gasUsed?: string;
   blockNumber?: number;
   explorerUrl?: string;
+  isContractTransaction?: boolean;
 }
 
 @Component({
@@ -34,7 +36,7 @@ export class TransactionComponent implements OnInit, OnDestroy {
   isConnected = false;
   currentNetwork: NetworkModel | null = null;
   balance = '0';
-  gasEstimate = '0.0001'; // Default gas estimate
+  gasEstimate = '0.0001';
   private isBrowser: boolean;
   
   // Form data
@@ -42,10 +44,16 @@ export class TransactionComponent implements OnInit, OnDestroy {
   amount = '';
   isSending = false;
   
-  // Transaction history
-  transactions: Transaction[] = [];
+  // Contract data
+  contractAddress = '';
+  contractBalance = '0';
+  isContractInitialized = false;
+  useContract = false;
+  
+  // Transaction history - AHORA SEPARADO POR RED
+  allTransactions: Transaction[] = []; // Todas las transacciones
+  transactions: Transaction[] = []; // Transacciones filtradas por red actual
   isLoadingTransactions = false;
-  showAllNetworks = false;
   
   // Toast notification
   showToast = false;
@@ -63,6 +71,7 @@ export class TransactionComponent implements OnInit, OnDestroy {
     private walletService: WalletService,
     private etherscanService: EtherscanService,
     private networkService: NetworkService,
+    private contractService: ContractService,
     @Inject(PLATFORM_ID) private platformId: Object
   ) {
     this.isBrowser = isPlatformBrowser(platformId);
@@ -72,7 +81,6 @@ export class TransactionComponent implements OnInit, OnDestroy {
     this.initWallet();
     this.setupEventListeners();
     
-    // Setup debounced refresh
     this.refreshSubject.pipe(
       debounceTime(300),
       takeUntil(this.destroy$)
@@ -80,20 +88,40 @@ export class TransactionComponent implements OnInit, OnDestroy {
       this.loadLocalTransactions();
     });
     
-    // Subscribe to network changes
+    // ESCUCHAR CAMBIOS DE RED
     this.networkSubscription = this.networkService.currentNetwork$.subscribe(
       network => {
         if (network) {
+          const previousChainId = this.currentNetwork?.chainId;
           this.currentNetwork = network;
+          
+          // Solo recargar si la red realmente cambió
+          if (previousChainId && previousChainId !== network.chainId) {
+            console.log(`🔄 Red cambiada de ${previousChainId} a ${network.chainId}`);
+            this.filterTransactionsByCurrentNetwork(); // FILTRAR INMEDIATAMENTE
+          }
+          
           this.loadBalance();
           this.refreshSubject.next();
+          
+          if (this.isContractInitialized) {
+            this.contractService.reinitializeProvider();
+            this.updateContractBalance();
+          }
         }
       }
     );
+
+    if (this.isBrowser) {
+      const savedContractAddress = localStorage.getItem('contractAddress');
+      if (savedContractAddress) {
+        this.contractAddress = savedContractAddress;
+        this.initializeContract();
+      }
+    }
   }
 
   ngOnDestroy() {
-    // Clean up subscriptions
     this.destroy$.next();
     this.destroy$.complete();
     
@@ -101,14 +129,12 @@ export class TransactionComponent implements OnInit, OnDestroy {
       this.networkSubscription.unsubscribe();
     }
     
-    // Remove event listeners only in browser environment
     if (this.isBrowser && (window as any).ethereum) {
       (window as any).ethereum.removeAllListeners();
     }
   }
 
   private async initWallet() {
-    // Only run in browser environment
     if (!this.isBrowser) {
       return;
     }
@@ -140,7 +166,6 @@ export class TransactionComponent implements OnInit, OnDestroy {
   }
 
   setupEventListeners() {
-    // Only set up event listeners in browser environment
     if (!this.isBrowser) {
       return;
     }
@@ -156,24 +181,19 @@ export class TransactionComponent implements OnInit, OnDestroy {
           this.router.navigate(['/']);
         }
       });
-
-      // Chain changed listener is handled globally by NetworkService
     }
   }
 
   private async loadNetworkInfo() {
-    // Only run in browser environment
     if (!this.isBrowser) {
       return;
     }
     
     try {
-      // Get current network from the network service instead
       const currentNetwork = this.networkService.getCurrentNetwork();
       if (currentNetwork) {
         this.currentNetwork = currentNetwork;
       } else {
-        // Fallback to getting chainId from ethereum
         const chainId = await (window as any).ethereum.request({
           method: 'eth_chainId'
         });
@@ -193,7 +213,6 @@ export class TransactionComponent implements OnInit, OnDestroy {
   }
 
   private async loadBalance() {
-    // Only run in browser environment
     if (!this.isBrowser) {
       return;
     }
@@ -202,12 +221,10 @@ export class TransactionComponent implements OnInit, OnDestroy {
       if (this.currentNetwork && this.walletAddress) {
         const balance = await this.walletService.getBalance(this.walletAddress, this.currentNetwork.chainId);
         this.balance = parseFloat(balance).toFixed(6);
-        // Save balance to localStorage as backup
         localStorage.setItem(`balance_${this.walletAddress}_${this.currentNetwork.chainId}`, this.balance);
       }
     } catch (error: any) {
       console.error('Error loading balance:', error);
-      // Try to load from localStorage as fallback
       const storedBalance = localStorage.getItem(`balance_${this.walletAddress}_${this.currentNetwork?.chainId}`);
       if (storedBalance) {
         this.balance = storedBalance;
@@ -215,8 +232,15 @@ export class TransactionComponent implements OnInit, OnDestroy {
     }
   }
 
+  // ============================================
+  // MÉTODO PRINCIPAL: CARGAR TRANSACCIONES
+  // ============================================
   private async loadLocalTransactions() {
-    // First try to load from localStorage
+    if (!this.isBrowser) {
+      return;
+    }
+
+    // 1. Cargar TODAS las transacciones del localStorage (sin filtrar)
     const stored = localStorage.getItem(`transactions_${this.walletAddress}`);
     let localTxs: Transaction[] = [];
     
@@ -224,10 +248,9 @@ export class TransactionComponent implements OnInit, OnDestroy {
       try {
         const storageData = JSON.parse(stored);
         
-        // Verificar si ha expirado (7 días)
         if (storageData.expiresAt && new Date().getTime() > storageData.expiresAt) {
           localStorage.removeItem(`transactions_${this.walletAddress}`);
-          console.log('Local storage data expired, cleared');
+          console.log('📅 Local storage data expired, cleared');
         } else {
           localTxs = (storageData.transactions || []).map((tx: any) => ({
             ...tx,
@@ -235,36 +258,38 @@ export class TransactionComponent implements OnInit, OnDestroy {
           }));
         }
       } catch (error: any) {
-        console.error('Error parsing local transactions:', error);
-        // Clear corrupted data
+        console.error('❌ Error parsing local transactions:', error);
         localStorage.removeItem(`transactions_${this.walletAddress}`);
       }
     }
     
-    // Show local transactions first
-    this.transactions = localTxs.sort((a, b) => 
-      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-    );
+    // 2. Guardar TODAS las transacciones
+    this.allTransactions = localTxs;
+    
+    // 3. FILTRAR por red actual
+    this.filterTransactionsByCurrentNetwork();
     
     if (localTxs.length > 0) {
-      this.showNotification(`Cargadas ${localTxs.length} transacciones locales`, 'success');
+      console.log(`✅ Cargadas ${localTxs.length} transacciones totales, mostrando ${this.transactions.length} de la red actual`);
     }
     
-    // Then try to load from Etherscan API
+    // 4. Cargar desde Etherscan si es posible
     if (this.currentNetwork && this.walletAddress) {
       this.isLoadingTransactions = true;
       try {
         const networkMap: { [key: string]: string } = {
-          '0x1': 'ETH Mainnet',
-          '0xaa36a7': 'ETH Sepolia'
+          '0x1': 'mainnet',
+          '0xaa36a7': 'sepolia',
+          '0x4268': 'holesky',
+          '0x89': 'polygon',
+          '0x13881': 'mumbai'
         };
         
-        const networkName = networkMap[this.currentNetwork.chainId] || 'ETH Mainnet';
+        const networkName = networkMap[this.currentNetwork.chainId] || 'mainnet';
         
         this.etherscanService.getAllTransactions(this.walletAddress, networkName).subscribe(
           (etherscanTxs: EtherscanTransaction[]) => {
             const mappedTxs: Transaction[] = etherscanTxs.map(tx => {
-              // Get explorer URL from the etherscan service
               const explorerUrl = this.etherscanService.getExplorerUrl(tx.network, tx.hash);
               
               return {
@@ -280,57 +305,62 @@ export class TransactionComponent implements OnInit, OnDestroy {
               };
             });
             
-            // Merge with existing local transactions
-            const mergedTxs = [...mappedTxs, ...localTxs];
+            // Combinar con transacciones locales
+            const mergedTxs = [...mappedTxs, ...this.allTransactions];
             const uniqueTxs = mergedTxs.filter((tx, index, self) => 
               index === self.findIndex(t => t.hash === tx.hash)
             );
             
-            this.transactions = uniqueTxs.sort((a, b) => 
-              new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-            );
+            // Guardar TODAS las transacciones
+            this.allTransactions = uniqueTxs;
             
-            // Save merged transactions to localStorage as backup
-            this.saveTransactionsToLocalStorage(this.transactions);
+            // Guardar en localStorage
+            this.saveTransactionsToLocalStorage(this.allTransactions);
+            
+            // FILTRAR por red actual
+            this.filterTransactionsByCurrentNetwork();
             
             if (mappedTxs.length > 0) {
-              this.showNotification(`Cargadas ${mappedTxs.length} transacciones desde Etherscan`, 'success');
-            } else {
-              this.showNotification('No se encontraron transacciones en Etherscan', 'info');
+              this.showNotification(`📥 Cargadas ${mappedTxs.length} transacciones desde Etherscan`, 'success');
             }
             
             this.isLoadingTransactions = false;
           },
           (error) => {
-            console.error('Error loading Etherscan transactions:', error);
-            this.showNotification('Error al cargar transacciones desde Etherscan: ' + (error.message || 'Error desconocido'), 'error');
-            // Still show local transactions if Etherscan fails
-            this.transactions = localTxs.sort((a, b) => 
-              new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-            );
+            console.error('❌ Error loading Etherscan transactions:', error);
+            this.filterTransactionsByCurrentNetwork();
             this.isLoadingTransactions = false;
           }
         );
       } catch (error: any) {
-        console.error('Error initiating Etherscan API call:', error);
-        this.showNotification('Error al iniciar llamada a Etherscan: ' + (error.message || 'Error desconocido'), 'error');
-        // Still show local transactions if Etherscan fails
-        this.transactions = localTxs.sort((a, b) => 
-          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-        );
+        console.error('❌ Error initiating Etherscan API call:', error);
+        this.filterTransactionsByCurrentNetwork();
         this.isLoadingTransactions = false;
       }
-    } else {
-      // If no network or wallet, at least show local transactions
-      this.transactions = localTxs.sort((a, b) => 
-        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-      );
-      this.isLoadingTransactions = false;
     }
   }
 
+  // ============================================
+  // NUEVO MÉTODO: FILTRAR POR RED ACTUAL
+  // ============================================
+  private filterTransactionsByCurrentNetwork() {
+    if (!this.currentNetwork) {
+      this.transactions = [];
+      return;
+    }
+
+    // Filtrar transacciones que coincidan con el chainId actual
+    this.transactions = this.allTransactions
+      .filter(tx => tx.chainId === this.currentNetwork!.chainId)
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    
+    console.log(`🔍 Filtrando transacciones: ${this.allTransactions.length} totales → ${this.transactions.length} de ${this.currentNetwork.name}`);
+  }
+
+  // ============================================
+  // GUARDAR TRANSACCIÓN (actualizado)
+  // ============================================
   saveTransaction(tx: Transaction) {
-    // Ensure explorer URL is set for the transaction
     if (!tx.explorerUrl && tx.chainId && tx.hash) {
       const network = this.networkService.getNetworkByChainId(tx.chainId);
       if (network?.explorer) {
@@ -338,19 +368,29 @@ export class TransactionComponent implements OnInit, OnDestroy {
       }
     }
     
-    const existingIndex = this.transactions.findIndex(t => t.hash === tx.hash);
+    // Actualizar en allTransactions
+    const existingIndex = this.allTransactions.findIndex(t => t.hash === tx.hash);
     
     if (existingIndex !== -1) {
-      this.transactions[existingIndex] = tx;
+      this.allTransactions[existingIndex] = tx;
     } else {
-      this.transactions.unshift(tx);
+      this.allTransactions.unshift(tx);
     }
     
-    this.saveTransactionsToLocalStorage(this.transactions);
+    // Guardar TODO en localStorage
+    this.saveTransactionsToLocalStorage(this.allTransactions);
+    
+    // FILTRAR por red actual
+    this.filterTransactionsByCurrentNetwork();
   }
 
   private saveTransactionsToLocalStorage(transactions: Transaction[]) {
+    if (!this.isBrowser) {
+      return;
+    }
+
     try {
+      // Mantener transacciones recientes de TODAS las redes
       const recentTxs = transactions.filter(t => 
         t.status === 'pending' || 
         (new Date().getTime() - t.timestamp.getTime()) < 7 * 24 * 60 * 60 * 1000
@@ -365,19 +405,14 @@ export class TransactionComponent implements OnInit, OnDestroy {
         `transactions_${this.walletAddress}`,
         JSON.stringify(storageData)
       );
+      
+      console.log(`💾 Guardadas ${recentTxs.length} transacciones en localStorage`);
     } catch (error) {
       console.error('Error saving transactions to localStorage:', error);
-      // If localStorage fails, try to clear it to prevent corruption
-      try {
-        localStorage.removeItem(`transactions_${this.walletAddress}`);
-      } catch (clearError) {
-        console.error('Error clearing localStorage:', clearError);
-      }
     }
   }
 
   async sendTransaction() {
-    // Only run in browser environment
     if (!this.isBrowser) {
       return;
     }
@@ -397,11 +432,22 @@ export class TransactionComponent implements OnInit, OnDestroy {
       return;
     }
 
-    if (parseFloat(this.amount) > parseFloat(this.balance)) {
-      this.showNotification('Saldo insuficiente', 'error');
-      return;
+    if (this.useContract) {
+      if (!this.isContractInitialized) {
+        this.showNotification('Por favor inicializa el contrato primero', 'error');
+        return;
+      }
+      await this.sendViaContract();
+    } else {
+      if (parseFloat(this.amount) > parseFloat(this.balance)) {
+        this.showNotification('Saldo insuficiente', 'error');
+        return;
+      }
+      await this.sendDirectTransaction();
     }
+  }
 
+  private async sendDirectTransaction() {
     this.isSending = true;
 
     try {
@@ -444,7 +490,8 @@ export class TransactionComponent implements OnInit, OnDestroy {
         status: 'pending',
         network: this.currentNetwork?.name || 'Unknown',
         chainId: this.currentNetwork?.chainId || '0x1',
-        explorerUrl: this.currentNetwork?.explorer ? `${this.currentNetwork.explorer}/tx/${txHash}` : undefined
+        explorerUrl: this.currentNetwork?.explorer ? `${this.currentNetwork.explorer}/tx/${txHash}` : undefined,
+        isContractTransaction: false
       };
 
       this.saveTransaction(transaction);
@@ -472,8 +519,176 @@ export class TransactionComponent implements OnInit, OnDestroy {
     }
   }
 
+  private async sendViaContract() {
+    this.isSending = true;
+
+    try {
+      const txHash = await this.contractService.sendContractTransaction(
+        this.recipientAddress,
+        this.amount
+      );
+
+      if (txHash) {
+        const transaction: Transaction = {
+          hash: txHash,
+          from: this.contractService.getContractAddress(),
+          to: this.recipientAddress,
+          value: this.amount,
+          timestamp: new Date(),
+          status: 'pending',
+          network: this.currentNetwork?.name || 'Unknown',
+          chainId: this.currentNetwork?.chainId || '0x1',
+          explorerUrl: this.currentNetwork?.explorer ? `${this.currentNetwork.explorer}/tx/${txHash}` : undefined,
+          isContractTransaction: true
+        };
+
+        this.saveTransaction(transaction);
+
+        this.recipientAddress = '';
+        this.amount = '';
+
+        this.showNotification(`Transacción de contrato enviada! Hash: ${this.formatAddress(txHash)}`, 'success');
+
+        setTimeout(async () => {
+          await this.loadBalance();
+          await this.updateContractBalance();
+        }, 2000);
+
+        this.checkTransactionStatus(txHash);
+      }
+    } catch (error: any) {
+      console.error('Error sending contract transaction:', error);
+      if (error.code === 4001) {
+        this.showNotification('Transacción cancelada por el usuario', 'info');
+      } else {
+        this.showNotification('Error al enviar la transacción de contrato: ' + error.message, 'error');
+      }
+    } finally {
+      this.isSending = false;
+    }
+  }
+
+  async depositToContract() {
+    if (!this.isBrowser || !this.isContractInitialized) {
+      this.showNotification('Contrato no inicializado', 'error');
+      return;
+    }
+
+    if (!this.amount) {
+      this.showNotification('Ingresa un monto para depositar', 'error');
+      return;
+    }
+
+    if (parseFloat(this.amount) <= 0) {
+      this.showNotification('El monto debe ser mayor a 0', 'error');
+      return;
+    }
+
+    if (parseFloat(this.amount) > parseFloat(this.balance)) {
+      this.showNotification('Saldo insuficiente', 'error');
+      return;
+    }
+
+    this.isSending = true;
+
+    try {
+      const txHash = await this.contractService.depositToContract(this.amount);
+
+      if (txHash) {
+        const transaction: Transaction = {
+          hash: txHash,
+          from: this.walletAddress,
+          to: this.contractService.getContractAddress(),
+          value: this.amount,
+          timestamp: new Date(),
+          status: 'pending',
+          network: this.currentNetwork?.name || 'Unknown',
+          chainId: this.currentNetwork?.chainId || '0x1',
+          explorerUrl: this.currentNetwork?.explorer ? `${this.currentNetwork.explorer}/tx/${txHash}` : undefined,
+          isContractTransaction: true
+        };
+
+        this.saveTransaction(transaction);
+
+        this.amount = '';
+
+        this.showNotification(`Depósito realizado! Hash: ${this.formatAddress(txHash)}`, 'success');
+
+        setTimeout(async () => {
+          await this.loadBalance();
+          await this.updateContractBalance();
+        }, 2000);
+
+        this.checkTransactionStatus(txHash);
+      }
+    } catch (error: any) {
+      console.error('Error depositing to contract:', error);
+      if (error.code === 4001) {
+        this.showNotification('Depósito cancelado por el usuario', 'info');
+      } else {
+        this.showNotification('Error al depositar: ' + error.message, 'error');
+      }
+    } finally {
+      this.isSending = false;
+    }
+  }
+
+  async initializeContract() {
+    if (!this.contractAddress) {
+      this.showNotification('Ingresa una dirección de contrato', 'error');
+      return;
+    }
+
+    if (!this.isValidAddress(this.contractAddress)) {
+      this.showNotification('Dirección de contrato inválida', 'error');
+      return;
+    }
+
+    try {
+      const success = await this.contractService.initContract(this.contractAddress);
+      
+      if (success) {
+        this.isContractInitialized = true;
+        await this.updateContractBalance();
+        
+        if (this.isBrowser) {
+          localStorage.setItem('contractAddress', this.contractAddress);
+        }
+        
+        this.showNotification('Contrato inicializado exitosamente', 'success');
+      } else {
+        this.showNotification('No se pudo inicializar el contrato', 'error');
+      }
+    } catch (error: any) {
+      console.error('Error initializing contract:', error);
+      this.showNotification('Error al inicializar el contrato: ' + error.message, 'error');
+    }
+  }
+
+  async updateContractBalance() {
+    if (this.isContractInitialized) {
+      try {
+        this.contractBalance = await this.contractService.updateContractBalance();
+      } catch (error) {
+        console.error('Error updating contract balance:', error);
+      }
+    }
+  }
+
+  clearContract() {
+    this.contractService.clearContract();
+    this.isContractInitialized = false;
+    this.contractAddress = '';
+    this.contractBalance = '0';
+    
+    if (this.isBrowser) {
+      localStorage.removeItem('contractAddress');
+    }
+    
+    this.showNotification('Contrato limpiado', 'info');
+  }
+
   private async checkTransactionStatus(txHash: string) {
-    // Only run in browser environment
     if (!this.isBrowser) {
       return;
     }
@@ -489,7 +704,7 @@ export class TransactionComponent implements OnInit, OnDestroy {
         });
 
         if (receipt) {
-          const tx = this.transactions.find(t => t.hash === txHash);
+          const tx = this.allTransactions.find(t => t.hash === txHash);
           if (tx) {
             tx.status = receipt.status === '0x1' ? 'success' : 'failed';
             tx.gasUsed = receipt.gasUsed;
@@ -506,6 +721,9 @@ export class TransactionComponent implements OnInit, OnDestroy {
             this.showNotification(`Transacción ${statusText}`, tx.status === 'success' ? 'success' : 'error');
             
             await this.loadBalance();
+            if (this.isContractInitialized) {
+              await this.updateContractBalance();
+            }
           }
           return;
         }
@@ -514,7 +732,7 @@ export class TransactionComponent implements OnInit, OnDestroy {
         if (attempts < maxAttempts) {
           setTimeout(checkStatus, 3000);
         } else {
-          const tx = this.transactions.find(t => t.hash === txHash);
+          const tx = this.allTransactions.find(t => t.hash === txHash);
           if (tx && tx.status === 'pending') {
             tx.status = 'failed';
             this.saveTransaction(tx);
@@ -533,13 +751,18 @@ export class TransactionComponent implements OnInit, OnDestroy {
     return /^0x[a-fA-F0-9]{40}$/.test(address);
   }
 
+  isValidAmount(): boolean {
+    if (!this.amount) return false;
+    const numAmount = parseFloat(this.amount);
+    return !isNaN(numAmount) && numAmount > 0;
+  }
+
   formatAddress(address: string): string {
     if (!address) return '';
     return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
   }
 
   copyToClipboard(text: string, label: string = 'Hash') {
-    // Only run in browser environment
     if (!this.isBrowser) {
       return;
     }
@@ -553,7 +776,6 @@ export class TransactionComponent implements OnInit, OnDestroy {
   }
 
   viewOnExplorer(txHash: string, chainId?: string) {
-    // Only run in browser environment
     if (!this.isBrowser) {
       return;
     }
@@ -570,16 +792,16 @@ export class TransactionComponent implements OnInit, OnDestroy {
   }
 
   viewTransactionDetails(tx: Transaction) {
-    // Only run in browser environment
     if (!this.isBrowser) {
       return;
     }
     
     const network = this.networkService.getNetworkByChainId(tx.chainId) || this.networkService.getCurrentNetwork();
     const explorerUrl = this.getExplorerUrl(tx) || 'No disponible';
+    const txType = tx.isContractTransaction ? '📜 Transacción de Contrato' : '💸 Transacción Directa';
     
     const details = `
-Detalles de la Transacción:
+${txType}
 ─────────────────────────
 Hash: ${tx.hash}
 De: ${tx.from}
@@ -593,7 +815,6 @@ ${tx.gasUsed ? `Gas Usado: ${parseInt(tx.gasUsed, 16)}` : ''}
 Explorer: ${explorerUrl}
     `;
     
-    // Create a more user-friendly modal with a link to the explorer
     const shouldOpenExplorer = confirm(`${details}\n\n¿Quieres abrir esta transacción en el explorador de bloques?`);
     if (shouldOpenExplorer && explorerUrl !== 'No disponible') {
       window.open(explorerUrl, '_blank');
@@ -616,118 +837,82 @@ Explorer: ${explorerUrl}
 
   disconnectWallet() {
     console.log('Disconnecting wallet from transaction page...');
-    // Remove event listeners only in browser environment
     if (this.isBrowser && (window as any).ethereum) {
       (window as any).ethereum.removeAllListeners();
     }
     
-    // Clear local storage
-    localStorage.removeItem(`transactions_${this.walletAddress}`);
-    localStorage.removeItem('account');
+    if (this.isBrowser) {
+      localStorage.removeItem(`transactions_${this.walletAddress}`);
+      localStorage.removeItem('account');
+    }
     
-    // Clear wallet data
     this.walletAddress = '';
     this.isConnected = false;
+    this.allTransactions = [];
     this.transactions = [];
-    
-    // Clear balance cache
     this.balance = '0';
     
-    // Use wallet service to properly logout
     this.walletService.logout();
     
-    // Navigate to login page
     this.router.navigate(['/login']);
   }
 
   setMaxAmount() {
-    const maxSendable = Math.max(0, parseFloat(this.balance) - 0.001);
-    this.amount = maxSendable.toFixed(6);
+    if (this.useContract && this.isContractInitialized) {
+      this.amount = parseFloat(this.contractBalance).toFixed(6);
+    } else {
+      const maxSendable = Math.max(0, parseFloat(this.balance) - 0.001);
+      this.amount = maxSendable.toFixed(6);
+    }
   }
 
-  // Method to handle address input
   onAddressInput(event: any) {
-    // Add any validation or formatting logic here if needed
     this.recipientAddress = event.target.value;
   }
 
-  // Method to handle amount input
   onAmountInput(event: any) {
-    // Add any validation or formatting logic here if needed
     this.amount = event.target.value;
   }
 
   async refreshTransactions() {
     this.showNotification('Actualizando transacciones...', 'info');
-    // Clear current transactions to show loading state
+    this.allTransactions = [];
     this.transactions = [];
-    // Force reload from both localStorage and API
-    this.refreshSubject.next();
-  }
-
-  toggleAllNetworks() {
-    this.showAllNetworks = !this.showAllNetworks;
     this.refreshSubject.next();
   }
 
   clearTransactionHistory() {
-    // Only run in browser environment
     if (!this.isBrowser) {
       return;
     }
     
     if (confirm('¿Estás seguro de que deseas borrar el historial local?')) {
       localStorage.removeItem(`transactions_${this.walletAddress}`);
+      this.allTransactions = [];
       this.transactions = [];
       this.showNotification('Historial local eliminado', 'info');
     }
   }
 
   backupTransactions() {
-    if (this.transactions.length > 0) {
-      this.saveTransactionsToLocalStorage(this.transactions);
-      this.showNotification(`Respaldo de ${this.transactions.length} transacciones guardado`, 'success');
+    if (this.allTransactions.length > 0) {
+      this.saveTransactionsToLocalStorage(this.allTransactions);
+      this.showNotification(`Respaldo de ${this.allTransactions.length} transacciones guardado`, 'success');
     } else {
       this.showNotification('No hay transacciones para respaldar', 'info');
     }
   }
 
-  getNetworkIcon(networkName: string): string {
-    const icons: { [key: string]: string } = {
-      'Ethereum': '🔷',
-      'Polygon': '🟣',
-      'BSC': '🟡',
-      'Sepolia': '🧪',
-      'Arbitrum': '🔵',
-      'Optimism': '🔴'
-    };
-    
-    for (const [key, icon] of Object.entries(icons)) {
-      if (networkName.includes(key)) {
-        return icon;
-      }
-    }
-    return '🌐';
-  }
-
-  /**
-   * Get explorer URL for a transaction
-   * @param tx - The transaction object
-   * @returns The explorer URL or undefined if not available
-   */
   getExplorerUrl(tx: Transaction): string | undefined {
-    // If explorerUrl is already set in the transaction, use it
     if (tx.explorerUrl) {
       return tx.explorerUrl;
     }
     
-    // Otherwise, try to construct it from the network service
     const network = this.networkService.getNetworkByChainId(tx.chainId);
     if (network?.explorer) {
       return `${network.explorer}/tx/${tx.hash}`;
     }
     
-    // Fallback to etherscan service method
     if (tx.network) {
       return this.etherscanService.getExplorerUrl(tx.network, tx.hash);
     }
@@ -735,18 +920,6 @@ Explorer: ${explorerUrl}
     return undefined;
   }
 
-  filterTransactionsByNetwork(networkName: string) {
-    if (!networkName) {
-      this.refreshSubject.next();
-      return;
-    }
-    
-    this.transactions = this.transactions.filter(tx => 
-      tx.network.toLowerCase().includes(networkName.toLowerCase())
-    );
-  }
-
-  // Method to switch network
   async switchNetwork(chainId: string) {
     const success = await this.walletService.switchNetwork(chainId);
     if (success) {
