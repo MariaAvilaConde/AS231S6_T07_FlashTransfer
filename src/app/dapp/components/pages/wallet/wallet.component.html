@@ -25,6 +25,47 @@
     </div>
   </header>
 
+  <!-- QR Code Modal -->
+  <div class="modal-overlay" *ngIf="showQRCode" (click)="closeQRCode()">
+    <div class="qr-modal-content" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h2 class="modal-title">Código QR para Recibir</h2>
+        <button class="modal-close" (click)="closeQRCode()">✕</button>
+      </div>
+      <div class="qr-content">
+        <div class="qr-code-container">
+          <img [src]="qrCodeDataUrl" alt="QR Code" class="qr-code-image" *ngIf="qrCodeDataUrl">
+          <div class="qr-loading" *ngIf="isGeneratingQR">
+            <div class="loader"></div>
+            <p>Generando código QR...</p>
+          </div>
+        </div>
+        <div class="wallet-address-display">
+          <p class="address-label">Tu Dirección de Wallet</p>
+          <div class="address-container">
+            <span class="address">{{ walletAddress }}</span>
+            <button class="copy-btn" (click)="copyQRData()" title="Copiar dirección">
+              📋
+            </button>
+          </div>
+        </div>
+        <p class="qr-instructions">Escanea este código QR para recibir tokens en tu wallet</p>
+        
+        <!-- Enhanced QR Actions -->
+        <div class="qr-actions">
+          <button class="action-btn download-btn" (click)="downloadQRCode()">
+            <span class="btn-icon">💾</span>
+            <span>Descargar QR</span>
+          </button>
+          <button class="action-btn metamask-btn" (click)="shareToMetaMask()">
+            <span class="btn-icon">🦊</span>
+            <span>Compartir MetaMask</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Loading State -->
   <div *ngIf="isLoading" class="loading-screen">
     <div class="loader"></div>
@@ -115,22 +156,30 @@
           </button>
         </div>
         <div class="transactions-list">
-          <div *ngFor="let tx of recentTransactions" class="transaction-item">
-            <div class="tx-icon" [class.tx-send]="tx.type === 'send'" [class.tx-receive]="tx.type === 'receive'">
-              {{ tx.type === 'send' ? '↑' : '↓' }}
+          <!-- Loading state -->
+          <div *ngIf="loadingTransactions" class="loading-transactions">
+            <div class="loader"></div>
+            <p>Cargando transacciones...</p>
+          </div>
+          
+          <!-- Transaction items -->
+          <div *ngFor="let tx of recentTransactions" class="transaction-item" (click)="viewTransactionDetails(tx)">
+            <div class="tx-icon" [class.tx-send]="isSentTransaction(tx)" [class.tx-receive]="isReceivedTransaction(tx)">
+              {{ isSentTransaction(tx) ? '↑' : '↓' }}
             </div>
             <div class="tx-info">
-              <p class="tx-address">{{ formatAddress(tx.address) }}</p>
-              <p class="tx-time">{{ tx.time }}</p>
+              <p class="tx-address">{{ formatAddress(isSentTransaction(tx) ? tx.to : tx.from) }}</p>
+              <p class="tx-time">{{ formatTransactionTime(tx.timestamp) }}</p>
             </div>
-            <div class="tx-amount" [class.tx-negative]="tx.type === 'send'" [class.tx-positive]="tx.type === 'receive'">
-              <p class="amount">{{ tx.amount }}</p>
-              <span class="tx-status">✓</span>
+            <div class="tx-amount" [class.tx-negative]="isSentTransaction(tx)" [class.tx-positive]="isReceivedTransaction(tx)">
+              <p class="amount">{{ formatTransactionAmount(tx) }}</p>
+              <span class="tx-status" *ngIf="tx.isError" title="Transacción fallida">❌</span>
+              <span class="tx-status" *ngIf="!tx.isError" title="Transacción exitosa">✓</span>
             </div>
           </div>
           
           <!-- Empty state -->
-          <div *ngIf="recentTransactions.length === 0" class="empty-transactions">
+          <div *ngIf="!loadingTransactions && recentTransactions.length === 0" class="empty-transactions">
             <div class="empty-icon">📭</div>
             <p class="empty-text">No hay transacciones recientes</p>
             <button class="send-tokens-btn" (click)="sendTokens()">Enviar tokens</button>

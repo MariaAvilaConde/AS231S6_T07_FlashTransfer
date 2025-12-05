@@ -21,22 +21,25 @@ export interface EtherscanTransaction {
   contractAddress?: string;
   blockNumber?: string;
   confirmations?: string;
+  receiptStatus?: any;
+  txStatus?: any;
 }
 
 @Injectable({
   providedIn: 'root'
 })
 export class EtherscanService {
-  private readonly API_KEY = 'BAEHKHKWNIEUE2E1BGHURP9MVG2CG7BMP7';
+  private readonly API_KEY = 'G1T6IKKGZRF4BMPXA4JEQ775TN65ARKNRN';
   private isBrowser: boolean;
 
+  // Updated to use proxy endpoints
   private readonly API_URLS: { [key: string]: string } = {
-    'mainnet': 'https://api.etherscan.io/api',
-    'holesky': 'https://api-holesky.etherscan.io/api',
-    'sepolia': 'https://api-sepolia.etherscan.io/api',
-    'goerli': 'https://api-goerli.etherscan.io/api',
-    'polygon': 'https://api.polygonscan.com/api',
-    'mumbai': 'https://api-testnet.polygonscan.com/api'
+    'mainnet': '/api-proxy',
+    'holesky': '/api-holesky-proxy',
+    'sepolia': '/api-sepolia-proxy',
+    'goerli': '/api-goerli-proxy',
+    'polygon': '/api-polygon-proxy',
+    'mumbai': '/api-mumbai-proxy'
   };
 
   private readonly EXPLORER_URLS: { [key: string]: string } = {
@@ -221,5 +224,65 @@ export class EtherscanService {
 
   clearCache() {
     this.cache.clear();
+  }
+
+  /**
+   * Get transaction receipt status
+   * @param txhash Transaction hash
+   * @param network Network name
+   * @returns Observable with transaction receipt status
+   */
+  getTransactionReceiptStatus(txhash: string, network: string): Observable<any> {
+    if (!txhash) return of(null);
+
+    const normalizedNetwork = this.normalizeNetworkName(network);
+    const apiUrl = this.getApiUrl(normalizedNetwork);
+    const url = `${apiUrl}?module=transaction&action=gettxreceiptstatus&txhash=${txhash}&apikey=${this.API_KEY}`;
+
+    return this.http.get<any>(url).pipe(
+      timeout(15000),
+      map(data => {
+        if (data.status === '1' && data.result) {
+          console.log(`✅ Transaction receipt status for ${txhash}:`, data.result);
+          return data.result;
+        }
+        console.warn(`⚠️ No receipt status found for ${txhash}`);
+        return null;
+      }),
+      catchError(error => {
+        console.error(`❌ Error fetching receipt status for ${txhash}:`, error);
+        return of(null);
+      })
+    );
+  }
+
+  /**
+   * Get transaction status
+   * @param txhash Transaction hash
+   * @param network Network name
+   * @returns Observable with transaction status
+   */
+  getTransactionStatus(txhash: string, network: string): Observable<any> {
+    if (!txhash) return of(null);
+
+    const normalizedNetwork = this.normalizeNetworkName(network);
+    const apiUrl = this.getApiUrl(normalizedNetwork);
+    const url = `${apiUrl}?module=transaction&action=getstatus&txhash=${txhash}&apikey=${this.API_KEY}`;
+
+    return this.http.get<any>(url).pipe(
+      timeout(15000),
+      map(data => {
+        if (data.status === '1' && data.result) {
+          console.log(`✅ Transaction status for ${txhash}:`, data.result);
+          return data.result;
+        }
+        console.warn(`⚠️ No status found for ${txhash}`);
+        return null;
+      }),
+      catchError(error => {
+        console.error(`❌ Error fetching status for ${txhash}:`, error);
+        return of(null);
+      })
+    );
   }
 }

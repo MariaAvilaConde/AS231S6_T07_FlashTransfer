@@ -51,7 +51,7 @@ describe('EtherscanService', () => {
     });
 
     const req = httpMock.expectOne(
-      `https://api.etherscan.io/api?module=account&action=txlist&address=${mockAddress}&startblock=0&endblock=99999999&sort=desc&apikey=91WBR32VV7QPMZCNPQP8U557NTBWB969TG`
+      `https://api.etherscan.io/api?module=account&action=txlist&address=${mockAddress}&startblock=0&endblock=99999999&sort=desc&apikey=G1T6IKKGZRF4BMPXA4JEQ775TN65ARKNRN`
     );
     expect(req.request.method).toBe('GET');
     req.flush(mockResponse);
@@ -86,7 +86,7 @@ describe('EtherscanService', () => {
     });
 
     const req = httpMock.expectOne(
-      `https://api.etherscan.io/api?module=account&action=tokentx&address=${mockAddress}&sort=desc&apikey=91WBR32VV7QPMZCNPQP8U557NTBWB969TG`
+      `https://api.etherscan.io/api?module=account&action=tokentx&address=${mockAddress}&sort=desc&apikey=G1T6IKKGZRF4BMPXA4JEQ775TN65ARKNRN`
     );
     expect(req.request.method).toBe('GET');
     req.flush(mockResponse);

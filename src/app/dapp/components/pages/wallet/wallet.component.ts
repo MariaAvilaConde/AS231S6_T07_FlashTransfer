@@ -4,7 +4,11 @@ import { Router } from '@angular/router';
 import { ethers } from 'ethers';
 import { WalletService } from '../../../service/wallet.service';
 import { NetworkService, Network as NetworkModel } from '../../../service/network.service';
+import { EtherscanService } from '../../../service/etherscan.service'; // Add this import
 import { debounceTime, distinctUntilChanged, Subject, takeUntil } from 'rxjs';
+
+// Add QRCode import
+import QRCode from 'qrcode';
 
 interface TokenBalance {
   symbol: string;
@@ -38,6 +42,15 @@ export class WalletComponent implements OnInit, OnDestroy {
   networkName = '';
   chainId = '';
   private isBrowser: boolean;
+  
+  // Add QR code properties
+  showQRCode = false;
+  qrCodeDataUrl = '';
+  qrCodeSvg = '';
+  isGeneratingQR = false;
+  
+  // Add transaction history properties
+  loadingTransactions = false;
 
   // Configuración de redes soportadas - URLS SIN CORS
   supportedNetworks: { [key: string]: NetworkConfig } = {
@@ -126,6 +139,7 @@ export class WalletComponent implements OnInit, OnDestroy {
     private router: Router, 
     private walletService: WalletService, 
     private networkService: NetworkService,
+    private etherscanService: EtherscanService, // Add this
     @Inject(PLATFORM_ID) private platformId: Object
   ) {
     this.isBrowser = isPlatformBrowser(platformId);
@@ -272,6 +286,9 @@ export class WalletComponent implements OnInit, OnDestroy {
 
         // Obtener saldos usando ethers.js
         await this.loadBalances(chainId);
+        
+        // Load recent transactions
+        await this.loadRecentTransactions();
 
       } catch (error: any) {
         console.error('Error loading wallet data:', error);
@@ -450,6 +467,9 @@ export class WalletComponent implements OnInit, OnDestroy {
     // Clear cache before refreshing
     (this.walletService as any).balanceCache.clear();
     this.refreshSubject.next();
+    
+    // Also refresh transactions
+    this.loadRecentTransactions();
   }
 
   disconnect() {
@@ -464,15 +484,134 @@ export class WalletComponent implements OnInit, OnDestroy {
 
   sendTokens() {
     // Navegar a la vista de transacciones
-    this.router.navigate(['/transaction']);
+    console.log('Navigating to transaction page');
+    this.router.navigate(['/transaction']).catch(error => {
+      console.error('Navigation error:', error);
+      // Show user-friendly error message
+      alert('Error al navegar a la página de transacciones. Por favor, inténtalo de nuevo.');
+    });
   }
 
   viewAllTransactions() {
     this.router.navigate(['/transaction']);
   }
 
+  // Enhanced QR code generation method
+  private async generateQRCode(data: string) {
+    try {
+      if (!data) {
+        throw new Error('No data provided for QR code generation');
+      }
+      
+      this.isGeneratingQR = true;
+      console.log('Generating QR code with data:', data);
+      
+      // Generate both PNG and SVG versions
+      this.qrCodeDataUrl = await QRCode.toDataURL(data, {
+        width: 300,
+        margin: 2,
+        color: {
+          dark: '#000000',
+          light: '#ffffff'
+        },
+        errorCorrectionLevel: 'H' // High error correction for better scanning
+      });
+      
+      // Generate SVG version for better quality
+      this.qrCodeSvg = await QRCode.toString(data, {
+        type: 'svg',
+        width: 300,
+        margin: 2,
+        color: {
+          dark: '#000000',
+          light: '#ffffff'
+        }
+      });
+      
+      this.showQRCode = true;
+      this.isGeneratingQR = false;
+      console.log('QR code generated successfully');
+    } catch (error: any) {
+      console.error('Error generating QR code:', error);
+      this.isGeneratingQR = false;
+      this.showNotification('Error al generar el código QR: ' + (error.message || 'Error desconocido'), 'error');
+      
+      // Fallback: show address as text
+      alert(`Dirección de wallet: ${data}`);
+    }
+  }
+
+  // Method to download QR code
+  downloadQRCode() {
+    if (!this.qrCodeDataUrl) {
+      this.showNotification('No hay código QR para descargar', 'error');
+      return;
+    }
+    
+    const link = document.createElement('a');
+    link.href = this.qrCodeDataUrl;
+    link.download = `flashtransfer-qr-${this.formatAddress(this.walletAddress)}.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    this.showNotification('Código QR descargado correctamente', 'success');
+  }
+
+  // Method to share QR code with MetaMask mobile
+  async shareToMetaMask() {
+    if (!this.isBrowser) return;
+    
+    try {
+      // Create a deep link for MetaMask mobile
+      const deepLink = `https://metamask.app.link/send/${this.walletAddress}`;
+      
+      // Try to open in MetaMask app first
+      if (this.isMobile()) {
+        window.location.href = deepLink;
+      } else {
+        // For desktop, copy the link and show instructions
+        await navigator.clipboard.writeText(deepLink);
+        this.showNotification('Enlace copiado. Abre MetaMask en tu móvil y pega el enlace.', 'success');
+      }
+    } catch (error) {
+      console.error('Error sharing to MetaMask:', error);
+      this.showNotification('Error al compartir con MetaMask', 'error');
+    }
+  }
+
+  // Helper method to detect mobile devices
+  private isMobile(): boolean {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  }
+
+  // Method to copy QR code data to clipboard
+  async copyQRData() {
+    try {
+      await navigator.clipboard.writeText(this.walletAddress);
+      this.showNotification('Dirección copiada al portapapeles', 'success');
+    } catch (error) {
+      console.error('Error copying to clipboard:', error);
+      this.showNotification('Error al copiar la dirección', 'error');
+    }
+  }
+
+  // Enhanced receiveTokens method
   receiveTokens() {
-    this.showNotification('Mostrar código QR próximamente', 'info');
+    console.log('Generating QR code for address:', this.walletAddress);
+    if (this.walletAddress) {
+      this.generateQRCode(this.walletAddress);
+    } else {
+      console.error('Wallet address is empty');
+      this.showNotification('No se puede generar el código QR. La dirección de la wallet no está disponible.', 'error');
+    }
+  }
+
+  // Add method to close QR code modal
+  closeQRCode() {
+    console.log('Closing QR code modal');
+    this.showQRCode = false;
+    this.qrCodeDataUrl = '';
   }
 
   // Método para manejar el cambio de red desde el HTML
@@ -615,6 +754,98 @@ export class WalletComponent implements OnInit, OnDestroy {
   // Método para verificar si la red actual es soportada
   isCurrentNetworkSupported(): boolean {
     return !!this.supportedNetworks[this.chainId];
+  }
+
+  // Add methods for transaction display
+  isSentTransaction(tx: any): boolean {
+    return tx.from.toLowerCase() === this.walletAddress.toLowerCase();
+  }
+
+  isReceivedTransaction(tx: any): boolean {
+    return tx.to.toLowerCase() === this.walletAddress.toLowerCase();
+  }
+
+  formatTransactionTime(timestamp: number): string {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+    
+    if (diffInSeconds < 60) {
+      return 'Justo ahora';
+    } else if (diffInSeconds < 3600) {
+      const minutes = Math.floor(diffInSeconds / 60);
+      return `Hace ${minutes} min`;
+    } else if (diffInSeconds < 86400) {
+      const hours = Math.floor(diffInSeconds / 3600);
+      return `Hace ${hours} horas`;
+    } else {
+      return date.toLocaleDateString('es-ES', {
+        day: '2-digit',
+        month: 'short'
+      });
+    }
+  }
+
+  formatTransactionAmount(tx: any): string {
+    if (tx.isToken) {
+      return `${parseFloat(tx.amount).toFixed(2)} ${tx.tokenSymbol}`;
+    } else {
+      return `${parseFloat(tx.amount).toFixed(4)} ${this.getNativeCurrency()}`;
+    }
+  }
+
+  viewTransactionDetails(tx: any): void {
+    // Open transaction in explorer
+    const network = this.networkService.getCurrentNetwork();
+    if (network) {
+      const explorerUrl = network.explorer;
+      window.open(`${explorerUrl}/tx/${tx.hash}`, '_blank');
+    }
+  }
+
+  // Add method to load recent transactions
+  private async loadRecentTransactions() {
+    if (!this.walletAddress) return;
+    
+    this.loadingTransactions = true;
+    try {
+      // Get the simple network name for Etherscan service
+      const simpleNetworkName = this.getSimpleNetworkName(this.networkName);
+      
+      console.log(`🔍 Loading recent transactions for ${this.walletAddress} on ${simpleNetworkName}`);
+      
+      this.etherscanService.getAllTransactions(this.walletAddress, simpleNetworkName)
+        .subscribe({
+          next: (transactions) => {
+            // Take only the first 5 transactions for the wallet view
+            this.recentTransactions = transactions.slice(0, 5);
+            this.loadingTransactions = false;
+            console.log(`✅ Loaded ${this.recentTransactions.length} recent transactions`);
+          },
+          error: (error) => {
+            console.error('Error loading transactions:', error);
+            this.loadingTransactions = false;
+            this.recentTransactions = [];
+          }
+        });
+    } catch (error) {
+      console.error('Error loading recent transactions:', error);
+      this.loadingTransactions = false;
+      this.recentTransactions = [];
+    }
+  }
+
+  // Helper method to convert full network names to simple names for Etherscan service
+  private getSimpleNetworkName(fullName: string): string {
+    const nameMap: { [key: string]: string } = {
+      'Ethereum Mainnet': 'mainnet',
+      'Sepolia Testnet': 'sepolia',
+      'Ethereum Holesky': 'holesky',
+      'Goerli Testnet': 'goerli',
+      'Polygon Mainnet': 'polygon',
+      'Mumbai Testnet': 'mumbai'
+    };
+    return nameMap[fullName] || 'mainnet';
   }
 
   private async loadBalancesForNetwork(chainId: string) {

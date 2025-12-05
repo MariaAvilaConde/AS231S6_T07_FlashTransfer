@@ -4,7 +4,7 @@ import { EtherscanService, EtherscanTransaction } from '../../../service/ethersc
 import { WalletService } from '../../../service/wallet.service';
 import { NetworkService } from '../../../service/network.service';
 import { FormsModule } from '@angular/forms';
-import { Subscription } from 'rxjs';
+import { Subscription, forkJoin } from 'rxjs';
 
 @Component({
   selector: 'app-history',
@@ -125,9 +125,35 @@ export class HistoryComponent implements OnInit, OnDestroy {
       .subscribe({
         next: (data) => {
           this.transactions = data;
-          this.applyFilters();
-          this.loading = false;
-          console.log(`✅ ${data.length} transacciones cargadas en ${this.currentNetwork}`);
+          
+          // For each transaction, get its status
+          const statusRequests = this.transactions.map(tx => 
+            forkJoin({
+              receiptStatus: this.etherscanService.getTransactionReceiptStatus(tx.hash, this.currentNetwork),
+              status: this.etherscanService.getTransactionStatus(tx.hash, this.currentNetwork)
+            })
+          );
+          
+          // Update transactions with status information
+          if (statusRequests.length > 0) {
+            forkJoin(statusRequests).subscribe(statusResults => {
+              this.transactions = this.transactions.map((tx, index) => {
+                const statusData = statusResults[index];
+                return {
+                  ...tx,
+                  receiptStatus: statusData.receiptStatus,
+                  txStatus: statusData.status
+                };
+              });
+              this.applyFilters();
+              this.loading = false;
+              console.log(`✅ ${data.length} transacciones cargadas en ${this.currentNetwork}`);
+            });
+          } else {
+            this.applyFilters();
+            this.loading = false;
+            console.log(`✅ ${data.length} transacciones cargadas en ${this.currentNetwork}`);
+          }
         },
         error: (err) => {
           console.error('Error loading transactions:', err);
@@ -246,6 +272,42 @@ export class HistoryComponent implements OnInit, OnDestroy {
       return 'text-red-600';
     }
     return 'text-green-600';
+  }
+
+  getTransactionStatusText(tx: EtherscanTransaction): string {
+    // If we have specific status information, use it
+    if (tx.txStatus) {
+      if (tx.txStatus.isError === '0') {
+        return 'Success';
+      } else if (tx.txStatus.isError === '1') {
+        return 'Failed';
+      }
+    }
+    
+    // Fallback to existing error status
+    if (tx.isError) {
+      return 'Failed';
+    }
+    
+    return 'Success';
+  }
+
+  getTransactionStatusClass(tx: EtherscanTransaction): string {
+    // If we have specific status information, use it
+    if (tx.txStatus) {
+      if (tx.txStatus.isError === '0') {
+        return 'bg-green-100 text-green-800';
+      } else if (tx.txStatus.isError === '1') {
+        return 'bg-red-100 text-red-800';
+      }
+    }
+    
+    // Fallback to existing error status
+    if (tx.isError) {
+      return 'bg-red-100 text-red-800';
+    }
+    
+    return 'bg-green-100 text-green-800';
   }
 
   getNetworkDisplayName(): string {

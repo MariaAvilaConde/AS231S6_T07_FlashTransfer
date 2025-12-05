@@ -157,6 +157,9 @@
               <!-- Estado -->
               <td class="px-6 py-4 whitespace-nowrap">
                 <div class="flex items-center">
+                  <span [class]="getTransactionStatusClass(tx)" class="px-2 py-1 rounded-full text-xs font-medium mr-2">
+                    {{ getTransactionStatusText(tx) }}
+                  </span>
                   <div [class]="getTransactionColor(tx)" class="flex items-center gap-2">
                     <svg *ngIf="getTransactionIcon(tx) === 'arrow-up'" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18" />
